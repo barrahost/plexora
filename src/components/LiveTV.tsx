@@ -114,10 +114,10 @@ export default function LiveTV({ creds, onPlay }: Props) {
 
         <div className="flex-1 overflow-y-auto">
           {filtered.map(ch => (
-            <button
+            <div
               key={ch.stream_id}
               onClick={() => playChannel(ch)}
-              className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-800 transition border-b border-gray-800/50 text-left group"
+              className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-800 transition border-b border-gray-800/50 cursor-pointer group"
             >
               <div className="w-10 h-10 rounded-lg bg-gray-800 flex-shrink-0 overflow-hidden">
                 {ch.stream_icon ? (
@@ -131,9 +131,9 @@ export default function LiveTV({ creds, onPlay }: Props) {
               <div className="flex-1 min-w-0">
                 <div className="text-white text-sm font-medium truncate">{ch.name}</div>
               </div>
-              <button
+              <div
                 onClick={e => handleFavorite(e, ch.stream_id)}
-                className="opacity-0 group-hover:opacity-100 transition p-1"
+                className="opacity-0 group-hover:opacity-100 transition p-1 cursor-pointer"
               >
                 <svg
                   className={`w-4 h-4 ${favorites.includes(ch.stream_id) ? 'text-yellow-400' : 'text-gray-600'}`}
@@ -144,11 +144,11 @@ export default function LiveTV({ creds, onPlay }: Props) {
                 >
                   <path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 21 12 17.77 5.82 21 7 14.14l-5-4.87 6.91-1.01L12 2z"/>
                 </svg>
-              </button>
+              </div>
               <svg className="w-4 h-4 text-gray-600 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M8 5v14l11-7z"/>
               </svg>
-            </button>
+            </div>
           ))}
           {filtered.length === 0 && (
             <div className="flex items-center justify-center h-40 text-gray-500 text-sm">
