@@ -3,6 +3,16 @@ import type { XtreamCredentials, XtreamCategory, XtreamMovie } from '../types/xt
 import { XtreamAPI, getFavorites, toggleFavorite } from '../utils/api'
 import Hls from 'hls.js'
 
+interface VodInfo {
+  plot?: string
+  cast?: string
+  director?: string
+  genre?: string
+  release_date?: string
+  releasedate?: string
+  description?: string
+}
+
 interface Props {
   creds: XtreamCredentials
   onPlay: (url: string, title: string, cover?: string) => void
@@ -16,6 +26,8 @@ export default function Movies({ creds, onPlay }: Props) {
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState<XtreamMovie | null>(null)
+  const [vodInfo, setVodInfo] = useState<VodInfo | null>(null)
+  const [infoLoading, setInfoLoading] = useState(false)
   const [playing, setPlaying] = useState(false)
   const [favorites, setFavorites] = useState<number[]>(getFavorites())
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -25,10 +37,7 @@ export default function Movies({ creds, onPlay }: Props) {
     async function load() {
       setLoading(true)
       try {
-        const [cats, vods] = await Promise.all([
-          api.getVodCategories(),
-          api.getVodStreams(),
-        ])
+        const [cats, vods] = await Promise.all([api.getVodCategories(), api.getVodStreams()])
         setCategories(cats)
         setMovies(vods)
       } catch (e) {
@@ -39,6 +48,36 @@ export default function Movies({ creds, onPlay }: Props) {
     }
     load()
   }, [api])
+
+  // Charge les métadonnées détaillées quand on sélectionne un film
+  useEffect(() => {
+    if (!selected) { setVodInfo(null); return }
+    setVodInfo(null)
+    setInfoLoading(true)
+    api.getVodInfo(selected.stream_id)
+      .then(data => {
+        const info = (data?.info || {}) as Record<string, unknown>
+        const movie = (data?.movie_data || {}) as Record<string, unknown>
+        const merged: VodInfo = {
+          plot: str(info.plot || info.description || movie.plot || selected.plot),
+          cast: str(info.cast || movie.cast || selected.cast),
+          director: str(info.director || movie.director || selected.director),
+          genre: str(info.genre || movie.genre || selected.genre),
+          release_date: str(info.release_date || info.releasedate || movie.release_date || selected.release_date),
+        }
+        setVodInfo(merged)
+      })
+      .catch(() => {
+        setVodInfo({
+          plot: selected.plot,
+          cast: selected.cast,
+          director: selected.director,
+          genre: selected.genre,
+          release_date: selected.release_date,
+        })
+      })
+      .finally(() => setInfoLoading(false))
+  }, [selected, api])
 
   // Lance le lecteur intégré
   useEffect(() => {
@@ -65,20 +104,16 @@ export default function Movies({ creds, onPlay }: Props) {
     hlsRef.current?.destroy()
   }
 
-  function handlePlay() {
-    setPlaying(true)
+  function handleFav(e: React.MouseEvent) {
+    if (!selected) return
+    e.stopPropagation()
+    setFavorites(toggleFavorite(selected.stream_id))
   }
 
   function handleFullscreen() {
     if (!selected) return
     const url = api.getVodStreamUrl(selected.stream_id, selected.container_extension || 'mp4')
     onPlay(url, selected.name, selected.stream_icon || selected.cover)
-  }
-
-  function handleFav(e: React.MouseEvent) {
-    if (!selected) return
-    e.stopPropagation()
-    setFavorites(toggleFavorite(selected.stream_id))
   }
 
   const filtered = useMemo(() => {
@@ -108,10 +143,11 @@ export default function Movies({ creds, onPlay }: Props) {
     const isFav = favorites.includes(selected.stream_id)
     const posterUrl = selected.stream_icon || selected.cover || ''
     const rating = Math.round(Number(selected.rating_5based) || 0)
+    const info = vodInfo || {}
 
     return (
-      <div className="flex h-full bg-gray-950 overflow-hidden">
-        {/* Colonne gauche : affiche (35% de la largeur) */}
+      <div className="flex h-full w-full bg-gray-950 overflow-hidden">
+        {/* Colonne gauche : affiche */}
         <div className="relative bg-black flex-shrink-0" style={{ width: '35%' }}>
           {posterUrl ? (
             <img src={posterUrl} alt={selected.name} className="w-full h-full object-cover object-top" />
@@ -152,7 +188,9 @@ export default function Movies({ creds, onPlay }: Props) {
           {/* Titre / genre / étoiles */}
           <div className="px-5 pt-4 pb-2 flex-shrink-0">
             <h1 className="text-white font-bold text-xl leading-tight">{selected.name}</h1>
-            {selected.genre && <p className="text-gray-400 text-sm mt-0.5">{selected.genre}</p>}
+            {(info.genre || selected.genre) && (
+              <p className="text-gray-400 text-sm mt-0.5">{info.genre || selected.genre}</p>
+            )}
             <div className="flex items-center gap-2 mt-1.5">
               <div className="flex items-center gap-0.5">
                 {Array.from({ length: 5 }).map((_, i) => (
@@ -161,8 +199,8 @@ export default function Movies({ creds, onPlay }: Props) {
                   </svg>
                 ))}
               </div>
-              {selected.release_date && (
-                <span className="text-gray-400 text-xs">Release Date : {selected.release_date}</span>
+              {(info.release_date || selected.release_date) && (
+                <span className="text-gray-400 text-xs">Release Date : {info.release_date || selected.release_date}</span>
               )}
             </div>
           </div>
@@ -183,52 +221,58 @@ export default function Movies({ creds, onPlay }: Props) {
                 </button>
               </>
             ) : (
-              <div className="w-full h-full flex items-center justify-center">
+              <div className="w-full h-full flex items-center justify-center cursor-pointer" onClick={() => setPlaying(true)}>
                 {posterUrl && (
                   <img src={posterUrl} alt="" className="w-full h-full object-cover opacity-25 absolute inset-0" />
                 )}
-                <button
-                  onClick={handlePlay}
-                  className="relative z-10 w-14 h-14 rounded-full bg-white/10 hover:bg-white/20 backdrop-blur border border-white/20 flex items-center justify-center transition"
-                >
+                <div className="relative z-10 w-14 h-14 rounded-full bg-white/10 hover:bg-white/20 backdrop-blur border border-white/20 flex items-center justify-center transition">
                   <svg className="w-7 h-7 text-white ml-1" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M8 5v14l11-7z"/>
                   </svg>
-                </button>
+                </div>
               </div>
             )}
           </div>
 
           {/* Infos détaillées */}
           <div className="flex-1 overflow-y-auto px-5 py-3 space-y-2">
-            {selected.release_date && (
+            {infoLoading && (
+              <div className="flex items-center gap-2 text-gray-500 text-xs">
+                <svg className="animate-spin w-3 h-3" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+                </svg>
+                Chargement des infos...
+              </div>
+            )}
+            {(info.release_date || selected.release_date) && (
               <p className="text-sm">
                 <span className="text-yellow-400 font-semibold">Release Date : </span>
-                <span className="text-gray-300">{selected.release_date}</span>
+                <span className="text-gray-300">{info.release_date || selected.release_date}</span>
               </p>
             )}
-            {selected.genre && (
+            {(info.genre || selected.genre) && (
               <p className="text-sm">
                 <span className="text-yellow-400 font-semibold">Genre : </span>
-                <span className="text-gray-300">{selected.genre}</span>
+                <span className="text-gray-300">{info.genre || selected.genre}</span>
               </p>
             )}
-            {selected.plot && (
+            {(info.plot || selected.plot) && (
               <p className="text-sm">
                 <span className="text-yellow-400 font-semibold">Description : </span>
-                <span className="text-gray-300 leading-relaxed">{selected.plot}</span>
+                <span className="text-gray-300 leading-relaxed">{info.plot || selected.plot}</span>
               </p>
             )}
-            {selected.director && (
+            {(info.director || selected.director) && (
               <p className="text-sm">
                 <span className="text-yellow-400 font-semibold">Director : </span>
-                <span className="text-gray-300">{selected.director}</span>
+                <span className="text-gray-300">{info.director || selected.director}</span>
               </p>
             )}
-            {selected.cast && (
+            {(info.cast || selected.cast) && (
               <p className="text-sm">
                 <span className="text-yellow-400 font-semibold">Cast : </span>
-                <span className="text-gray-300">{selected.cast}</span>
+                <span className="text-gray-300">{info.cast || selected.cast}</span>
               </p>
             )}
           </div>
@@ -239,7 +283,7 @@ export default function Movies({ creds, onPlay }: Props) {
 
   // Vue grille
   return (
-    <div className="flex h-full">
+    <div className="flex h-full w-full">
       {/* Sidebar catégories */}
       <div className="w-52 flex-shrink-0 bg-gray-900 border-r border-gray-800 overflow-y-auto">
         <div className="p-3">
@@ -317,4 +361,9 @@ export default function Movies({ creds, onPlay }: Props) {
       </div>
     </div>
   )
+}
+
+function str(v: unknown): string | undefined {
+  if (v === null || v === undefined || v === '') return undefined
+  return String(v)
 }

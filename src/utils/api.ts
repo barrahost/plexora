@@ -62,6 +62,10 @@ export class XtreamAPI {
     return this.fetch<XtreamSeriesInfo>(`action=get_series_info&series_id=${seriesId}`)
   }
 
+  async getVodInfo(vodId: number): Promise<{ info: Record<string, unknown>; movie_data: Record<string, unknown> }> {
+    return this.fetch(`action=get_vod_info&vod_id=${vodId}`)
+  }
+
   async getEPG(streamId: number): Promise<{ epg_listings: EPGItem[] }> {
     return this.fetch<{ epg_listings: EPGItem[] }>(`action=get_short_epg&stream_id=${streamId}&limit=5`)
   }
