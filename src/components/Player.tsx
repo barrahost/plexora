@@ -20,7 +20,7 @@ export default function Player({ streamUrl, title, cover, channel, creds, onClos
   const [epg, setEpg] = useState<EPGItem[]>([])
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [showControls, setShowControls] = useState(true)
-  const timerRef = useRef<ReturnType<typeof setTimeout>>()
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     const video = videoRef.current
@@ -56,7 +56,7 @@ export default function Player({ streamUrl, title, cover, channel, creds, onClos
 
   function handleMouseMove() {
     setShowControls(true)
-    clearTimeout(timerRef.current)
+    if (timerRef.current) clearTimeout(timerRef.current)
     timerRef.current = setTimeout(() => setShowControls(false), 3000)
   }
 

@@ -150,7 +150,6 @@ export function deletePlaylist(id: string): void {
 
 export function saveCredentials(creds: XtreamCredentials) {
   // Upsert dans la liste des playlists
-  const playlists = getPlaylists()
   const active = getActivePlaylist()
   if (active) {
     updatePlaylist(active.id, creds)

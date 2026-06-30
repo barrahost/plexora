@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import type { XtreamCredentials, XtreamChannel, XtreamAccountInfo, ViewType } from './types/xtream'
-import { loadCredentials, clearCredentials, XtreamAPI, getActivePlaylistId, setActivePlaylistId, getPlaylists } from './utils/api'
+import { loadCredentials, clearCredentials, XtreamAPI, getActivePlaylistId, getPlaylists } from './utils/api'
 import Login from './components/Login'
 import LiveTV from './components/LiveTV'
 import Movies from './components/Movies'
