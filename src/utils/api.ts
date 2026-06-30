@@ -86,22 +86,90 @@ export class XtreamAPI {
   }
 }
 
+// ── Playlists multi-compte ──────────────────────────────────────────────────
+
+import type { XtreamPlaylist } from '../types/xtream'
+
+function genId(): string {
+  return Math.random().toString(36).slice(2) + Date.now().toString(36)
+}
+
+export function getPlaylists(): XtreamPlaylist[] {
+  try {
+    const raw = localStorage.getItem('iptv_playlists')
+    if (raw) return JSON.parse(raw) as XtreamPlaylist[]
+    // Migration : si ancienne session unique existe
+    const old = localStorage.getItem('iptv_creds')
+    if (old) {
+      const c = JSON.parse(old) as XtreamCredentials
+      const pl: XtreamPlaylist = { id: genId(), name: c.url.replace(/https?:\/\//, '').split('/')[0], ...c }
+      savePlaylists([pl])
+      return [pl]
+    }
+    return []
+  } catch { return [] }
+}
+
+export function savePlaylists(playlists: XtreamPlaylist[]): void {
+  localStorage.setItem('iptv_playlists', JSON.stringify(playlists))
+}
+
+export function getActivePlaylistId(): string | null {
+  return localStorage.getItem('iptv_active_id')
+}
+
+export function setActivePlaylistId(id: string): void {
+  localStorage.setItem('iptv_active_id', id)
+}
+
+export function getActivePlaylist(): XtreamPlaylist | null {
+  const playlists = getPlaylists()
+  if (playlists.length === 0) return null
+  const id = getActivePlaylistId()
+  return playlists.find(p => p.id === id) ?? playlists[0]
+}
+
+export function addPlaylist(pl: Omit<XtreamPlaylist, 'id'>): XtreamPlaylist {
+  const playlists = getPlaylists()
+  const newPl = { ...pl, id: genId() }
+  savePlaylists([...playlists, newPl])
+  return newPl
+}
+
+export function updatePlaylist(id: string, patch: Partial<Omit<XtreamPlaylist, 'id'>>): void {
+  const playlists = getPlaylists().map(p => p.id === id ? { ...p, ...patch } : p)
+  savePlaylists(playlists)
+}
+
+export function deletePlaylist(id: string): void {
+  savePlaylists(getPlaylists().filter(p => p.id !== id))
+  if (getActivePlaylistId() === id) localStorage.removeItem('iptv_active_id')
+}
+
+// ── Compat ancienne API (session unique) ────────────────────────────────────
+
 export function saveCredentials(creds: XtreamCredentials) {
+  // Upsert dans la liste des playlists
+  const playlists = getPlaylists()
+  const active = getActivePlaylist()
+  if (active) {
+    updatePlaylist(active.id, creds)
+  } else {
+    const newPl = addPlaylist({ name: creds.url.replace(/https?:\/\//, '').split('/')[0], ...creds })
+    setActivePlaylistId(newPl.id)
+  }
   localStorage.setItem('iptv_creds', JSON.stringify(creds))
 }
 
 export function loadCredentials(): XtreamCredentials | null {
-  const raw = localStorage.getItem('iptv_creds')
-  if (!raw) return null
-  try {
-    return JSON.parse(raw)
-  } catch {
-    return null
-  }
+  const pl = getActivePlaylist()
+  if (pl) return { url: pl.url, username: pl.username, password: pl.password }
+  return null
 }
 
 export function clearCredentials() {
   localStorage.removeItem('iptv_creds')
+  localStorage.removeItem('iptv_active_id')
 }
 
 export function getFavorites(): number[] {

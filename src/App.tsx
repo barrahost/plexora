@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
 import type { XtreamCredentials, XtreamChannel, XtreamAccountInfo, ViewType } from './types/xtream'
-import { loadCredentials, clearCredentials, XtreamAPI } from './utils/api'
+import { loadCredentials, clearCredentials, XtreamAPI, getActivePlaylistId, setActivePlaylistId, getPlaylists } from './utils/api'
 import Login from './components/Login'
 import LiveTV from './components/LiveTV'
 import Movies from './components/Movies'
 import SeriesView from './components/Series'
 import Player from './components/Player'
+import PlaylistManager from './components/PlaylistManager'
 
 interface PlayInfo {
   url: string
@@ -27,6 +28,7 @@ export default function App() {
 
   function handleLogin(c: XtreamCredentials) {
     setCreds(c)
+    setView('live')
   }
 
   function handleLogout() {
@@ -39,6 +41,18 @@ export default function App() {
   function handlePlay(url: string, title: string, cover?: string, channel?: XtreamChannel) {
     setPlaying({ url, title, cover, channel })
   }
+
+  function handlePlaylistSwitch(c: XtreamCredentials) {
+    setCreds(c)
+    setPlaying(null)
+    setAccountInfo(null)
+    setView('live')
+    new XtreamAPI(c).getAccountInfo().then(setAccountInfo).catch(() => {})
+  }
+
+  const playlists = getPlaylists()
+  const activePlaylistId = getActivePlaylistId() ?? playlists[0]?.id ?? null
+  const activeName = playlists.find(p => p.id === activePlaylistId)?.name ?? null
 
   if (!creds) return <Login onLogin={handleLogin} />
 
@@ -76,17 +90,40 @@ export default function App() {
           ))}
         </nav>
 
-        <div className="ml-auto flex items-center gap-3">
+        <div className="ml-auto flex items-center gap-2">
+          {/* Playlist active */}
+          {activeName && (
+            <button
+              onClick={() => setView('playlists')}
+              className={`hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs transition ${view === 'playlists' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}
+              title="Gérer les playlists"
+            >
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z"/></svg>
+              <span className="max-w-[120px] truncate">{activeName}</span>
+            </button>
+          )}
+
           {accountInfo && (
-            <div className="hidden md:flex items-center gap-2 text-xs text-gray-400">
-              <div className={`w-2 h-2 rounded-full ${accountInfo.user_info.status === 'Active' ? 'bg-green-500' : 'bg-red-500'}`} />
+            <div className="hidden lg:flex items-center gap-2 text-xs text-gray-500 px-2">
+              <div className={`w-1.5 h-1.5 rounded-full ${accountInfo.user_info.status === 'Active' ? 'bg-green-500' : 'bg-red-500'}`} />
               <span>{accountInfo.user_info.username}</span>
-              {expDate && <span className="text-gray-600">· expire {expDate}</span>}
+              {expDate && <span>· {expDate}</span>}
             </div>
           )}
+
+          {/* Playlists (mobile) */}
+          <button
+            onClick={() => setView('playlists')}
+            className={`md:hidden flex items-center justify-center w-8 h-8 rounded-lg transition ${view === 'playlists' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}
+            title="Playlists"
+          >
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z"/></svg>
+          </button>
+
           <button
             onClick={handleLogout}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm text-gray-400 hover:text-white hover:bg-gray-800 transition"
+            title="Déconnexion"
           >
             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>
@@ -101,6 +138,7 @@ export default function App() {
         {view === 'live' && <LiveTV creds={creds} onPlay={handlePlay} />}
         {view === 'movies' && <Movies creds={creds} onPlay={handlePlay} />}
         {view === 'series' && <SeriesView creds={creds} onPlay={handlePlay} />}
+        {view === 'playlists' && <PlaylistManager onSwitch={handlePlaylistSwitch} />}
       </main>
 
       {/* Player overlay */}
