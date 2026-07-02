@@ -44,13 +44,14 @@ export class XtreamAPI {
     // Page HTTPS → proxy obligatoire (mixed content bloqué par le navigateur).
     // Page HTTP (dev ou hébergement HTTP) → appel direct, le serveur IPTV envoie CORS *.
     const url = needsProxy() ? `/proxy?target=${encodeURIComponent(directUrl)}` : directUrl
-    // Le serveur IPTV est instable (max_connections=1, rate-limit) → retry avec backoff
+    // Retry doux : 2 tentatives max, backoff long. Le serveur bannit les IPs
+    // trop actives → ne jamais marteler.
     let lastErr: unknown
-    for (let attempt = 0; attempt < 3; attempt++) {
-      if (attempt > 0) await new Promise(r => setTimeout(r, attempt * 1500))
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (attempt > 0) await new Promise(r => setTimeout(r, 4000))
       try {
         const ctrl = new AbortController()
-        const timer = setTimeout(() => ctrl.abort(), 20000)
+        const timer = setTimeout(() => ctrl.abort(), 15000)
         const res = await fetch(url, { signal: ctrl.signal })
         clearTimeout(timer)
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
