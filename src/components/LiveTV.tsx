@@ -43,35 +43,42 @@ export default function LiveTV({ creds, onPlay }: Props) {
   useEffect(() => {
     if (!activeChannel || !videoRef.current) return
     setPlayerError(null)
-    const m3u8 = api.getLiveStreamUrl(activeChannel.stream_id, 'm3u8')
-    // Page HTTP : HLS.js direct (serveur IPTV envoie CORS *). Page HTTPS : proxy /hls (mixed content).
-    const url = needsProxy() ? `/hls?url=${encodeURIComponent(m3u8)}` : m3u8
-    const video = videoRef.current
-    hlsRef.current?.destroy()
-    if (Hls.isSupported()) {
-      const hls = new Hls({ enableWorker: true })
-      hlsRef.current = hls
-      hls.loadSource(url)
-      hls.attachMedia(video)
-      hls.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(() => {}))
-      hls.on(Hls.Events.ERROR, (_, data) => {
-        if (data.fatal) setPlayerError(`${data.type} / ${data.details}`)
-      })
-    } else {
-      video.src = url
-      video.play().catch(() => {})
-    }
-    return () => { hlsRef.current?.destroy(); hlsRef.current = null; stopVideo(video) }
-  }, [activeChannel, api])
-
-  useEffect(() => {
-    if (!activeChannel) return
     setEpg([])
     setEpgLoading(true)
-    api.getEPG(activeChannel.stream_id)
-      .then(data => setEpg(Array.isArray(data.epg_listings) ? data.epg_listings : []))
-      .catch(() => setEpg([]))
-      .finally(() => setEpgLoading(false))
+    const video = videoRef.current
+    let cancelled = false
+
+    // 1) Charger l'EPG AVANT d'ouvrir le flux : avec max_connections=1,
+    // le serveur refuse souvent les requêtes API pendant qu'un flux est ouvert.
+    const epgPromise = api.getEPG(activeChannel.stream_id)
+      .then(data => { if (!cancelled) setEpg(Array.isArray(data.epg_listings) ? data.epg_listings : []) })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setEpgLoading(false) })
+
+    // 2) Puis démarrer la lecture (sans attendre plus de 5s si l'EPG traîne)
+    function startPlayback() {
+      if (cancelled) return
+      const m3u8 = api.getLiveStreamUrl(activeChannel!.stream_id, 'm3u8')
+      // Page HTTP : HLS.js direct (serveur IPTV envoie CORS *). Page HTTPS : proxy /hls (mixed content).
+      const url = needsProxy() ? `/hls?url=${encodeURIComponent(m3u8)}` : m3u8
+      hlsRef.current?.destroy()
+      if (Hls.isSupported()) {
+        const hls = new Hls({ enableWorker: true })
+        hlsRef.current = hls
+        hls.loadSource(url)
+        hls.attachMedia(video)
+        hls.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(() => {}))
+        hls.on(Hls.Events.ERROR, (_, data) => {
+          if (data.fatal) setPlayerError(`${data.type} / ${data.details}`)
+        })
+      } else {
+        video.src = url
+        video.play().catch(() => {})
+      }
+    }
+    Promise.race([epgPromise, new Promise(r => setTimeout(r, 5000))]).then(startPlayback)
+
+    return () => { cancelled = true; hlsRef.current?.destroy(); hlsRef.current = null; stopVideo(video) }
   }, [activeChannel, api])
 
   const countByCat = useMemo(() => {
