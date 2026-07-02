@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import type { XtreamCredentials, XtreamChannel, XtreamMovie, XtreamSeries, XtreamAccountInfo, ViewType } from './types/xtream'
-import { loadCredentials, clearCredentials, XtreamAPI, getActivePlaylistId, getPlaylists, stopVideo } from './utils/api'
+import { loadCredentials, clearCredentials, XtreamAPI, stopVideo } from './utils/api'
 import Login from './components/Login'
 import LiveTV from './components/LiveTV'
 import Movies from './components/Movies'
@@ -8,6 +8,7 @@ import SeriesView from './components/Series'
 import Player from './components/Player'
 import PlaylistManager from './components/PlaylistManager'
 import GlobalSearch from './components/GlobalSearch'
+import { prefetchXmltv } from './utils/epg'
 
 interface PlayInfo {
   url: string
@@ -65,6 +66,8 @@ export default function App() {
   useEffect(() => {
     if (!creds) return
     new XtreamAPI(creds).getAccountInfo().then(setAccountInfo).catch(() => {})
+    // Précharger le guide XMLTV en arrière-plan → EPG instantané partout
+    prefetchXmltv(creds)
   }, [creds])
 
   // Fermeture d'onglet / navigation : couper tous les flux pour libérer
@@ -99,9 +102,6 @@ export default function App() {
     new XtreamAPI(c).getAccountInfo().then(setAccountInfo).catch(() => {})
   }
 
-  const playlists = getPlaylists()
-  const activePlaylistId = getActivePlaylistId() ?? playlists[0]?.id ?? null
-  const activeName = playlists.find(p => p.id === activePlaylistId)?.name ?? null
 
   if (!creds) return <Login onLogin={handleLogin} />
 
@@ -147,19 +147,6 @@ export default function App() {
             <span className="hidden md:block text-xs text-gray-500">Rechercher</span>
             <kbd className="hidden md:block text-[10px] text-gray-500 bg-gray-800 border border-gray-700 rounded px-1.5 py-0.5">Ctrl K</kbd>
           </button>
-          {activeName && (
-            <button
-              onClick={() => setView('playlists')}
-              className={`hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs transition-colors ${
-                view === 'playlists' ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white hover:bg-gray-800'
-              }`}
-              style={{ touchAction: 'manipulation' }}
-            >
-              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z"/></svg>
-              <span className="max-w-[120px] truncate">{activeName}</span>
-            </button>
-          )}
-
           {accountInfo && (
             <div className="hidden lg:flex items-center gap-2 text-xs text-gray-500 px-2">
               <div className={`w-1.5 h-1.5 rounded-full ${accountInfo.user_info.status === 'Active' ? 'bg-green-500' : 'bg-red-500'}`} />

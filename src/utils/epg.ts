@@ -11,15 +11,24 @@ const TTL_MS = 6 * 3600 * 1000 // re-télécharger après 6h
 let cache: { key: string; loadedAt: number; byChannel: Map<string, EPGItem[]> } | null = null
 let loading: Promise<Map<string, EPGItem[]>> | null = null
 
-export async function getXmltvEpg(creds: XtreamCredentials, epgChannelId: string): Promise<EPGItem[]> {
-  if (!epgChannelId) return []
+async function ensureLoaded(creds: XtreamCredentials): Promise<void> {
   const key = `${creds.url}|${creds.username}`
   const fresh = cache && cache.key === key && Date.now() - cache.loadedAt < TTL_MS
-  if (!fresh) {
-    if (!loading) loading = fetchAndParse(creds).finally(() => { loading = null })
-    const byChannel = await loading
-    cache = { key, loadedAt: Date.now(), byChannel }
-  }
+  if (fresh) return
+  if (!loading) loading = fetchAndParse(creds).finally(() => { loading = null })
+  const byChannel = await loading
+  cache = { key, loadedAt: Date.now(), byChannel }
+}
+
+// Précharge le guide en arrière-plan dès l'ouverture de l'appli :
+// l'EPG est alors instantané sur toutes les chaînes.
+export function prefetchXmltv(creds: XtreamCredentials): void {
+  ensureLoaded(creds).catch(() => { /* pas de guide disponible */ })
+}
+
+export async function getXmltvEpg(creds: XtreamCredentials, epgChannelId: string): Promise<EPGItem[]> {
+  if (!epgChannelId) return []
+  await ensureLoaded(creds)
   const now = Date.now() / 1000
   // Programme en cours + suivants uniquement
   return (cache!.byChannel.get(epgChannelId) ?? []).filter(p => p.stop_timestamp > now).slice(0, 6)
