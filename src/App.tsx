@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import type { XtreamCredentials, XtreamChannel, XtreamAccountInfo, ViewType } from './types/xtream'
-import { loadCredentials, clearCredentials, XtreamAPI, getActivePlaylistId, getPlaylists } from './utils/api'
+import { loadCredentials, clearCredentials, XtreamAPI, getActivePlaylistId, getPlaylists, stopVideo } from './utils/api'
 import Login from './components/Login'
 import LiveTV from './components/LiveTV'
 import Movies from './components/Movies'
@@ -48,6 +48,14 @@ export default function App() {
     if (!creds) return
     new XtreamAPI(creds).getAccountInfo().then(setAccountInfo).catch(() => {})
   }, [creds])
+
+  // Fermeture d'onglet / navigation : couper tous les flux pour libérer
+  // la connexion IPTV (max_connections=1) immédiatement côté serveur
+  useEffect(() => {
+    const stopAll = () => document.querySelectorAll('video').forEach(v => stopVideo(v))
+    window.addEventListener('pagehide', stopAll)
+    return () => window.removeEventListener('pagehide', stopAll)
+  }, [])
 
   function handleLogin(c: XtreamCredentials) {
     setCreds(c)

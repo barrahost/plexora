@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo, useRef } from 'react'
 import type { XtreamCredentials, XtreamCategory, XtreamMovie } from '../types/xtream'
-import { XtreamAPI, getFavorites, toggleFavorite, needsProxy } from '../utils/api'
+import { XtreamAPI, getFavorites, toggleFavorite, needsProxy, stopVideo } from '../utils/api'
 import Hls from 'hls.js'
 
 interface VodInfo {
@@ -91,7 +91,7 @@ export default function Movies({ creds, onPlay }: Props) {
     video.src = url
     video.load()
     video.play().catch(() => {})
-    return () => { video.src = '' }
+    return () => { stopVideo(video) }
   }, [playing, selected, api])
 
   function handleSelectCat(id: string, name: string) {

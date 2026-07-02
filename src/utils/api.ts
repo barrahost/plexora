@@ -15,6 +15,18 @@ export function needsProxy(): boolean {
   return window.location.protocol === 'https:'
 }
 
+// Coupe réellement la connexion au flux : pause + retrait du src + load().
+// Un simple `video.src = ''` laisse la connexion HTTP ouverte côté serveur,
+// ce qui bloque le compte IPTV (max_connections=1).
+export function stopVideo(video: HTMLVideoElement | null): void {
+  if (!video) return
+  try {
+    video.pause()
+    video.removeAttribute('src')
+    video.load()
+  } catch { /* ignore */ }
+}
+
 export class XtreamAPI {
   private creds: XtreamCredentials
 

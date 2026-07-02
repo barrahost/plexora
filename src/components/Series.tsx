@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo, useRef } from 'react'
 import type { XtreamCredentials, XtreamCategory, XtreamSeries } from '../types/xtream'
-import { XtreamAPI, needsProxy } from '../utils/api'
+import { XtreamAPI, needsProxy, stopVideo } from '../utils/api'
 import Hls from 'hls.js'
 
 interface EpisodeData {
@@ -108,7 +108,7 @@ export default function SeriesView({ creds, onPlay }: Props) {
     video.src = url
     video.load()
     video.play().catch(() => {})
-    return () => { video.src = '' }
+    return () => { stopVideo(video) }
   }, [activeEp, selected, api])
 
   function openFullscreen() {

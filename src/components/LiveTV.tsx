@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo, useRef } from 'react'
 import type { XtreamCredentials, XtreamCategory, XtreamChannel, EPGItem } from '../types/xtream'
-import { XtreamAPI, getFavorites, toggleFavorite, needsProxy } from '../utils/api'
+import { XtreamAPI, getFavorites, toggleFavorite, needsProxy, stopVideo } from '../utils/api'
 import Hls from 'hls.js'
 
 interface Props {
@@ -61,7 +61,7 @@ export default function LiveTV({ creds, onPlay }: Props) {
       video.src = url
       video.play().catch(() => {})
     }
-    return () => { hlsRef.current?.destroy(); hlsRef.current = null }
+    return () => { hlsRef.current?.destroy(); hlsRef.current = null; stopVideo(video) }
   }, [activeChannel, api])
 
   useEffect(() => {

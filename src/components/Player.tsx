@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import Hls from 'hls.js'
 import type { XtreamChannel, XtreamMovie, EPGItem } from '../types/xtream'
-import { XtreamAPI, needsProxy } from '../utils/api'
+import { XtreamAPI, needsProxy, stopVideo } from '../utils/api'
 import type { XtreamCredentials } from '../types/xtream'
 
 interface Props {
@@ -47,6 +47,7 @@ export default function Player({ streamUrl, title, cover, channel, creds, onClos
     return () => {
       hlsRef.current?.destroy()
       hlsRef.current = null
+      stopVideo(video)
     }
   }, [streamUrl])
 
