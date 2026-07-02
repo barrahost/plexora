@@ -84,16 +84,20 @@ export default function PlaylistManager({ onSwitch }: Props) {
 
   const isActive = (id: string) => id === activeId
 
-  return (
-    <div className="flex h-full w-full overflow-hidden">
+  // Sur mobile, si on édite on masque la liste pour afficher le formulaire plein écran
+  const showListMobile = !editing
+  const showFormMobile = !!editing
 
-      {/* ── Colonne gauche : liste des playlists ── */}
-      <div className="w-80 flex-shrink-0 bg-gray-900 border-r border-gray-800 flex flex-col overflow-hidden">
+  return (
+    <div className="flex flex-col sm:flex-row h-full w-full overflow-hidden">
+
+      {/* ── Liste des playlists ── visible toujours sur desktop, conditionnel sur mobile */}
+      <div className={`${showListMobile ? 'flex' : 'hidden'} sm:flex w-full sm:w-80 flex-shrink-0 bg-gray-900 sm:border-r border-gray-800 flex-col overflow-hidden`}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-800">
           <h2 className="text-white font-semibold text-base">Mes playlists</h2>
           <button
             onClick={handleNew}
-            className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm px-3 py-1.5 rounded-lg transition"
+            className="flex items-center gap-1.5 bg-violet-600 hover:bg-violet-500 text-white text-sm px-3 py-1.5 rounded-lg transition"
           >
             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <path d="M12 5v14M5 12h14"/>
@@ -111,7 +115,7 @@ export default function PlaylistManager({ onSwitch }: Props) {
               key={pl.id}
               className={`rounded-xl border transition ${
                 isActive(pl.id)
-                  ? 'bg-blue-600/20 border-blue-500/50'
+                  ? 'bg-violet-600/20 border-violet-500/50'
                   : editing === pl.id
                   ? 'bg-gray-800 border-gray-600'
                   : 'bg-gray-800/50 border-gray-800 hover:border-gray-700'
@@ -119,7 +123,7 @@ export default function PlaylistManager({ onSwitch }: Props) {
             >
               <div className="flex items-center gap-3 p-3">
                 {/* Icône */}
-                <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${isActive(pl.id) ? 'bg-blue-600' : 'bg-gray-700'}`}>
+                <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${isActive(pl.id) ? 'bg-violet-600' : 'bg-gray-700'}`}>
                   <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z"/>
                   </svg>
@@ -129,7 +133,7 @@ export default function PlaylistManager({ onSwitch }: Props) {
                   <div className="flex items-center gap-2">
                     <span className="text-white text-sm font-medium truncate">{pl.name}</span>
                     {isActive(pl.id) && (
-                      <span className="flex-shrink-0 text-xs bg-blue-600 text-white px-1.5 py-0.5 rounded-md">Actif</span>
+                      <span className="flex-shrink-0 text-xs bg-violet-600 text-white px-1.5 py-0.5 rounded-md">Actif</span>
                     )}
                   </div>
                   <div className="text-gray-500 text-xs truncate mt-0.5">{pl.username}@{pl.url.replace(/https?:\/\//, '').split('/')[0]}</div>
@@ -141,7 +145,7 @@ export default function PlaylistManager({ onSwitch }: Props) {
                 {!isActive(pl.id) && (
                   <button
                     onClick={() => handleSwitch(pl)}
-                    className="flex-1 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold py-1.5 rounded-lg transition flex items-center justify-center gap-1"
+                    className="flex-1 bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold py-1.5 rounded-lg transition flex items-center justify-center gap-1"
                   >
                     <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
                     Utiliser
@@ -179,10 +183,22 @@ export default function PlaylistManager({ onSwitch }: Props) {
         </div>
       </div>
 
-      {/* ── Colonne droite : formulaire ── */}
-      <div className="flex-1 overflow-y-auto">
+      {/* ── Formulaire ── visible toujours sur desktop, conditionnel sur mobile */}
+      <div className={`${showFormMobile ? 'flex' : 'hidden'} sm:flex flex-1 flex-col overflow-hidden`}>
+        {/* Header mobile avec retour */}
+        <div className="sm:hidden flex items-center gap-3 px-4 py-3 border-b border-gray-800 bg-gray-900 flex-shrink-0">
+          <button
+            onClick={() => { setEditing(null); setForm(EMPTY_FORM); setTestResult(null) }}
+            className="w-10 h-10 flex items-center justify-center rounded-xl bg-gray-800 text-gray-300"
+            style={{ touchAction: 'manipulation' }}
+          >
+            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m15 18-6-6 6-6"/></svg>
+          </button>
+          <h3 className="text-white font-semibold text-sm">{editing === 'new' ? 'Nouvelle playlist' : 'Modifier'}</h3>
+        </div>
+        <div className="flex-1 overflow-y-auto overscroll-contain">
         {!editing ? (
-          <div className="flex items-center justify-center h-full text-center p-8">
+          <div className="hidden sm:flex items-center justify-center h-full text-center p-8">
             <div>
               <svg className="w-16 h-16 text-gray-700 mx-auto mb-4" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z"/>
@@ -206,7 +222,7 @@ export default function PlaylistManager({ onSwitch }: Props) {
                   value={form.name}
                   onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
                   placeholder="Ex: Ma playlist principale"
-                  className="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-500 placeholder-gray-500"
+                  className="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-violet-500 placeholder-gray-500"
                 />
               </div>
 
@@ -219,7 +235,7 @@ export default function PlaylistManager({ onSwitch }: Props) {
                   value={form.url}
                   onChange={e => { setForm(f => ({ ...f, url: e.target.value })); setTestResult(null) }}
                   placeholder="http://monserveur.com"
-                  className="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-500 placeholder-gray-500"
+                  className="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-violet-500 placeholder-gray-500"
                 />
               </div>
 
@@ -233,7 +249,7 @@ export default function PlaylistManager({ onSwitch }: Props) {
                     value={form.username}
                     onChange={e => { setForm(f => ({ ...f, username: e.target.value })); setTestResult(null) }}
                     placeholder="username"
-                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-500 placeholder-gray-500"
+                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-violet-500 placeholder-gray-500"
                   />
                 </div>
                 <div>
@@ -245,7 +261,7 @@ export default function PlaylistManager({ onSwitch }: Props) {
                     value={form.password}
                     onChange={e => { setForm(f => ({ ...f, password: e.target.value })); setTestResult(null) }}
                     placeholder="••••••••"
-                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-500 placeholder-gray-500"
+                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-violet-500 placeholder-gray-500"
                   />
                 </div>
               </div>
@@ -286,7 +302,7 @@ export default function PlaylistManager({ onSwitch }: Props) {
                 <button
                   onClick={handleSave}
                   disabled={!form.url || !form.username || !form.password}
-                  className="flex-1 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition"
+                  className="flex-1 flex items-center justify-center gap-2 bg-violet-600 hover:bg-violet-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition"
                 >
                   <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/>
@@ -304,6 +320,7 @@ export default function PlaylistManager({ onSwitch }: Props) {
             </div>
           </div>
         )}
+        </div>
       </div>
     </div>
   )

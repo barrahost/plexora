@@ -38,13 +38,10 @@ export default function Login({ onLogin }: Props) {
     <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-10">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-blue-600 mb-4">
-            <svg className="w-9 h-9 text-white" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z"/>
-            </svg>
+          <div className="flex justify-center mb-6">
+            <img src="/logo-plexora-login.png" alt="Plexora" className="w-64 h-auto" />
           </div>
-          <h1 className="text-3xl font-bold text-white tracking-tight">IPTV Web</h1>
-          <p className="text-gray-400 mt-1 text-sm">Connecte-toi avec tes identifiants Xtream</p>
+          <p className="text-gray-400 text-sm">Connecte-toi avec tes identifiants Xtream</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -58,7 +55,7 @@ export default function Login({ onLogin }: Props) {
               onChange={e => setUrl(e.target.value)}
               placeholder="http://monserveur.com"
               required
-              className="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition placeholder-gray-500"
+              className="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500 transition placeholder-gray-500"
             />
           </div>
           <div>
@@ -71,7 +68,7 @@ export default function Login({ onLogin }: Props) {
               onChange={e => setUsername(e.target.value)}
               placeholder="username"
               required
-              className="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition placeholder-gray-500"
+              className="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500 transition placeholder-gray-500"
             />
           </div>
           <div>
@@ -84,7 +81,7 @@ export default function Login({ onLogin }: Props) {
               onChange={e => setPassword(e.target.value)}
               placeholder="••••••••"
               required
-              className="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition placeholder-gray-500"
+              className="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500 transition placeholder-gray-500"
             />
           </div>
 
@@ -97,7 +94,7 @@ export default function Login({ onLogin }: Props) {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-xl py-3.5 text-sm transition-colors mt-2"
+            className="w-full bg-violet-600 hover:bg-violet-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-xl py-3.5 text-sm transition-colors mt-2"
           >
             {loading ? (
               <span className="flex items-center justify-center gap-2">

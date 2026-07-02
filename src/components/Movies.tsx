@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo, useRef } from 'react'
 import type { XtreamCredentials, XtreamCategory, XtreamMovie } from '../types/xtream'
-import { XtreamAPI, getFavorites, toggleFavorite } from '../utils/api'
+import { XtreamAPI, getFavorites, toggleFavorite, needsProxy } from '../utils/api'
 import Hls from 'hls.js'
 
 interface VodInfo {
@@ -23,6 +23,8 @@ export default function Movies({ creds, onPlay }: Props) {
   const [categories, setCategories] = useState<XtreamCategory[]>([])
   const [movies, setMovies] = useState<XtreamMovie[]>([])
   const [selectedCat, setSelectedCat] = useState<string>('all')
+  const [selectedCatName, setSelectedCatName] = useState<string>('Tous les films')
+  const [mobileStep, setMobileStep] = useState<'categories' | 'movies' | 'detail'>('categories')
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState<XtreamMovie | null>(null)
@@ -82,24 +84,26 @@ export default function Movies({ creds, onPlay }: Props) {
   // Lance le lecteur intégré
   useEffect(() => {
     if (!playing || !selected || !videoRef.current) return
-    const url = api.getVodStreamUrl(selected.stream_id, selected.container_extension || 'mp4')
+    const direct = api.getVodStreamUrl(selected.stream_id, selected.container_extension || 'mp4')
+    const url = needsProxy() ? `/proxy?target=${encodeURIComponent(direct)}` : direct
     const video = videoRef.current
     hlsRef.current?.destroy()
-    if (Hls.isSupported()) {
-      const hls = new Hls({ enableWorker: true })
-      hlsRef.current = hls
-      hls.loadSource(url)
-      hls.attachMedia(video)
-      hls.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(() => {}))
-    } else {
-      video.src = url
-      video.play().catch(() => {})
-    }
-    return () => { hlsRef.current?.destroy(); hlsRef.current = null }
+    video.src = url
+    video.load()
+    video.play().catch(() => {})
+    return () => { video.src = '' }
   }, [playing, selected, api])
+
+  function handleSelectCat(id: string, name: string) {
+    setSelectedCat(id)
+    setSelectedCatName(name)
+    setSearch('')
+    setMobileStep('movies')
+  }
 
   function handleSelect(m: XtreamMovie) {
     setSelected(m)
+    setMobileStep('detail')
     setPlaying(false)
     hlsRef.current?.destroy()
   }
@@ -129,7 +133,7 @@ export default function Movies({ creds, onPlay }: Props) {
   if (loading) return (
     <div className="flex-1 flex items-center justify-center">
       <div className="text-center">
-        <svg className="animate-spin w-8 h-8 text-blue-500 mx-auto mb-3" viewBox="0 0 24 24" fill="none">
+        <svg className="animate-spin w-8 h-8 text-violet-500 mx-auto mb-3" viewBox="0 0 24 24" fill="none">
           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
         </svg>
@@ -145,220 +149,340 @@ export default function Movies({ creds, onPlay }: Props) {
     const rating = Math.round(Number(selected.rating_5based) || 0)
     const info = vodInfo || {}
 
+    const stars = (
+      <div className="flex items-center gap-0.5">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <svg key={i} className={`w-3.5 h-3.5 ${i < rating ? 'text-yellow-400' : 'text-gray-700'}`} viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 21 12 17.77 5.82 21 7 14.14l-5-4.87 6.91-1.01L12 2z"/>
+          </svg>
+        ))}
+      </div>
+    )
+
+    const playerEl = (
+      <div className="flex-shrink-0 relative bg-black w-full" style={{ aspectRatio: '16/9' }}>
+        {playing ? (
+          <>
+            <video ref={videoRef} className="w-full h-full object-contain" controls />
+            <button onClick={handleFullscreen} className="absolute top-2 right-2 bg-black/60 hover:bg-black/80 text-white rounded-lg p-1.5 transition" style={{ touchAction: 'manipulation' }}>
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
+            </button>
+          </>
+        ) : (
+          <div className="w-full h-full flex items-center justify-center cursor-pointer" onClick={() => setPlaying(true)} style={{ touchAction: 'manipulation' }}>
+            {posterUrl && <img src={posterUrl} alt="" className="w-full h-full object-cover opacity-25 absolute inset-0" />}
+            <div className="relative z-10 w-16 h-16 rounded-full bg-white/10 hover:bg-white/20 backdrop-blur border border-white/20 flex items-center justify-center transition">
+              <svg className="w-8 h-8 text-white ml-1" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+            </div>
+          </div>
+        )}
+      </div>
+    )
+
+    const infoEl = (
+      <div className="space-y-2 px-4 py-3">
+        {infoLoading && (
+          <div className="flex items-center gap-2 text-gray-500 text-xs">
+            <svg className="animate-spin w-3 h-3" viewBox="0 0 24 24" fill="none">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+            </svg>
+            Chargement des infos...
+          </div>
+        )}
+        {(info.release_date || selected.release_date) && <p className="text-sm"><span className="text-yellow-400 font-semibold">Release Date : </span><span className="text-gray-300">{info.release_date || selected.release_date}</span></p>}
+        {(info.genre || selected.genre) && <p className="text-sm"><span className="text-yellow-400 font-semibold">Genre : </span><span className="text-gray-300">{info.genre || selected.genre}</span></p>}
+        {(info.plot || selected.plot) && <p className="text-sm"><span className="text-yellow-400 font-semibold">Description : </span><span className="text-gray-300 leading-relaxed">{info.plot || selected.plot}</span></p>}
+        {(info.director || selected.director) && <p className="text-sm"><span className="text-yellow-400 font-semibold">Director : </span><span className="text-gray-300">{info.director || selected.director}</span></p>}
+        {(info.cast || selected.cast) && <p className="text-sm"><span className="text-yellow-400 font-semibold">Cast : </span><span className="text-gray-300">{info.cast || selected.cast}</span></p>}
+      </div>
+    )
+
+    // Sur mobile : retour vers la grille. Sur desktop : retour vers la liste globale.
+    const backBtn = (
+      <button
+        onClick={() => {
+          setPlaying(false)
+          hlsRef.current?.destroy()
+          setSelected(null)
+          setMobileStep('movies')
+        }}
+        className="flex items-center gap-1.5 text-gray-300 hover:text-white transition"
+        style={{ touchAction: 'manipulation' }}
+      >
+        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m15 18-6-6 6-6"/></svg>
+        <span className="text-sm">Retour</span>
+      </button>
+    )
+
     return (
       <div className="flex h-full w-full bg-gray-950 overflow-hidden">
-        {/* Colonne gauche : affiche */}
-        <div className="relative bg-black flex-shrink-0" style={{ width: '35%' }}>
-          {posterUrl ? (
-            <img src={posterUrl} alt={selected.name} className="w-full h-full object-cover object-top" />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center bg-gray-800">
-              <svg className="w-20 h-20 text-gray-600" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M18 4l2 4h-3l-2-4h-2l2 4h-3l-2-4H8l2 4H7L5 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V4h-4z"/>
-              </svg>
+
+        {/* ── MOBILE : colonne unique ── */}
+        <div className="sm:hidden flex flex-col h-full w-full overflow-hidden">
+          {/* Header */}
+          <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-800 bg-gray-900 flex-shrink-0">
+            {backBtn}
+            <div className="flex-1 min-w-0">
+              <div className="text-white font-semibold text-sm truncate">{selected.name}</div>
+              {(info.genre || selected.genre) && <div className="text-gray-500 text-xs truncate">{info.genre || selected.genre}</div>}
             </div>
-          )}
-          {/* Note */}
-          <div className="absolute top-3 left-3 flex items-center gap-1 bg-black/70 rounded-lg px-2 py-1">
-            <svg className="w-3.5 h-3.5 text-yellow-400" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 21 12 17.77 5.82 21 7 14.14l-5-4.87 6.91-1.01L12 2z"/>
-            </svg>
-            <span className="text-white text-xs font-bold">{rating}</span>
+            <button onClick={handleFav} className="w-10 h-10 flex items-center justify-center flex-shrink-0" style={{ touchAction: 'manipulation' }}>
+              <svg className={`w-5 h-5 ${isFav ? 'text-red-500' : 'text-gray-500'}`} viewBox="0 0 24 24" fill={isFav ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+            </button>
           </div>
-          {/* Favori */}
-          <button onClick={handleFav} className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/70 flex items-center justify-center hover:bg-black/90 transition">
-            <svg className={`w-4 h-4 ${isFav ? 'text-red-500' : 'text-white'}`} viewBox="0 0 24 24" fill={isFav ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
-              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
-            </svg>
-          </button>
-          {/* Retour */}
-          <button
-            onClick={() => { setSelected(null); setPlaying(false); hlsRef.current?.destroy() }}
-            className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-1.5 bg-black/70 hover:bg-black/90 text-white text-xs px-3 py-2 rounded-xl transition whitespace-nowrap"
-          >
-            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M19 12H5M12 5l-7 7 7 7"/>
-            </svg>
-            Retour
-          </button>
+          {/* Player full width */}
+          {playerEl}
+          {/* Étoiles */}
+          <div className="flex items-center gap-2 px-4 pt-3 flex-shrink-0">
+            {stars}
+            {rating > 0 && <span className="text-gray-400 text-xs">{rating}/5</span>}
+          </div>
+          {/* Infos scrollables */}
+          <div className="flex-1 overflow-y-auto overscroll-contain">
+            {infoEl}
+          </div>
         </div>
 
-        {/* Colonne droite : titre + player + infos */}
-        <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-          {/* Titre / genre / étoiles */}
-          <div className="px-5 pt-4 pb-2 flex-shrink-0">
-            <h1 className="text-white font-bold text-xl leading-tight">{selected.name}</h1>
-            {(info.genre || selected.genre) && (
-              <p className="text-gray-400 text-sm mt-0.5">{info.genre || selected.genre}</p>
-            )}
-            <div className="flex items-center gap-2 mt-1.5">
-              <div className="flex items-center gap-0.5">
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <svg key={i} className={`w-3.5 h-3.5 ${i < rating ? 'text-yellow-400' : 'text-gray-700'}`} viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 21 12 17.77 5.82 21 7 14.14l-5-4.87 6.91-1.01L12 2z"/>
-                  </svg>
-                ))}
-              </div>
-              {(info.release_date || selected.release_date) && (
-                <span className="text-gray-400 text-xs">Release Date : {info.release_date || selected.release_date}</span>
-              )}
-            </div>
-          </div>
-
-          {/* Player — pleine largeur de la colonne droite */}
-          <div className="flex-shrink-0 relative bg-black w-full" style={{ aspectRatio: '16/9' }}>
-            {playing ? (
-              <>
-                <video ref={videoRef} className="w-full h-full object-contain" controls />
-                <button
-                  onClick={handleFullscreen}
-                  className="absolute top-2 right-2 bg-black/60 hover:bg-black/80 text-white rounded-lg p-1.5 transition"
-                  title="Plein écran"
-                >
-                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
-                  </svg>
-                </button>
-              </>
+        {/* ── DESKTOP : poster gauche + droite ── */}
+        <div className="hidden sm:flex h-full w-full overflow-hidden">
+          {/* Colonne gauche : affiche */}
+          <div className="relative bg-black flex-shrink-0" style={{ width: '35%' }}>
+            {posterUrl ? (
+              <img src={posterUrl} alt={selected.name} className="w-full h-full object-cover object-top" />
             ) : (
-              <div className="w-full h-full flex items-center justify-center cursor-pointer" onClick={() => setPlaying(true)}>
-                {posterUrl && (
-                  <img src={posterUrl} alt="" className="w-full h-full object-cover opacity-25 absolute inset-0" />
-                )}
-                <div className="relative z-10 w-14 h-14 rounded-full bg-white/10 hover:bg-white/20 backdrop-blur border border-white/20 flex items-center justify-center transition">
-                  <svg className="w-7 h-7 text-white ml-1" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M8 5v14l11-7z"/>
-                  </svg>
-                </div>
+              <div className="w-full h-full flex items-center justify-center bg-gray-800">
+                <svg className="w-20 h-20 text-gray-600" viewBox="0 0 24 24" fill="currentColor"><path d="M18 4l2 4h-3l-2-4h-2l2 4h-3l-2-4H8l2 4H7L5 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V4h-4z"/></svg>
               </div>
             )}
+            <div className="absolute top-3 left-3 flex items-center gap-1 bg-black/70 rounded-lg px-2 py-1">
+              <svg className="w-3.5 h-3.5 text-yellow-400" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 21 12 17.77 5.82 21 7 14.14l-5-4.87 6.91-1.01L12 2z"/></svg>
+              <span className="text-white text-xs font-bold">{rating}</span>
+            </div>
+            <button onClick={handleFav} className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/70 flex items-center justify-center hover:bg-black/90 transition">
+              <svg className={`w-4 h-4 ${isFav ? 'text-red-500' : 'text-white'}`} viewBox="0 0 24 24" fill={isFav ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+            </button>
+            <button onClick={() => { setSelected(null); setPlaying(false); hlsRef.current?.destroy(); setMobileStep('movies') }} className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-1.5 bg-black/70 hover:bg-black/90 text-white text-xs px-3 py-2 rounded-xl transition whitespace-nowrap">
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+              Retour
+            </button>
           </div>
-
-          {/* Infos détaillées */}
-          <div className="flex-1 overflow-y-auto px-5 py-3 space-y-2">
-            {infoLoading && (
-              <div className="flex items-center gap-2 text-gray-500 text-xs">
-                <svg className="animate-spin w-3 h-3" viewBox="0 0 24 24" fill="none">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
-                </svg>
-                Chargement des infos...
+          {/* Colonne droite */}
+          <div className="flex-1 flex flex-col overflow-hidden min-w-0 min-h-0">
+            {/* Header titre */}
+            <div className="px-5 pt-4 pb-2 flex-shrink-0">
+              <h1 className="text-white font-bold text-xl leading-tight">{selected.name}</h1>
+              {(info.genre || selected.genre) && <p className="text-gray-400 text-sm mt-0.5">{info.genre || selected.genre}</p>}
+              <div className="flex items-center gap-2 mt-1.5">
+                {stars}
+                {(info.release_date || selected.release_date) && <span className="text-gray-400 text-xs">{info.release_date || selected.release_date}</span>}
               </div>
-            )}
-            {(info.release_date || selected.release_date) && (
-              <p className="text-sm">
-                <span className="text-yellow-400 font-semibold">Release Date : </span>
-                <span className="text-gray-300">{info.release_date || selected.release_date}</span>
-              </p>
-            )}
-            {(info.genre || selected.genre) && (
-              <p className="text-sm">
-                <span className="text-yellow-400 font-semibold">Genre : </span>
-                <span className="text-gray-300">{info.genre || selected.genre}</span>
-              </p>
-            )}
-            {(info.plot || selected.plot) && (
-              <p className="text-sm">
-                <span className="text-yellow-400 font-semibold">Description : </span>
-                <span className="text-gray-300 leading-relaxed">{info.plot || selected.plot}</span>
-              </p>
-            )}
-            {(info.director || selected.director) && (
-              <p className="text-sm">
-                <span className="text-yellow-400 font-semibold">Director : </span>
-                <span className="text-gray-300">{info.director || selected.director}</span>
-              </p>
-            )}
-            {(info.cast || selected.cast) && (
-              <p className="text-sm">
-                <span className="text-yellow-400 font-semibold">Cast : </span>
-                <span className="text-gray-300">{info.cast || selected.cast}</span>
-              </p>
-            )}
+            </div>
+            {/* Zone player + infos : 50 / 50 */}
+            <div className="flex-1 flex flex-col overflow-hidden min-h-0">
+              {/* Player — 50% */}
+              <div className="h-1/2 relative bg-black flex-shrink-0 overflow-hidden">
+                {playing ? (
+                  <>
+                    <video ref={videoRef} className="w-full h-full object-contain" controls />
+                    <button onClick={handleFullscreen} className="absolute top-2 right-2 bg-black/60 hover:bg-black/80 text-white rounded-lg p-1.5 transition">
+                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
+                    </button>
+                  </>
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center cursor-pointer" onClick={() => setPlaying(true)}>
+                    {posterUrl && <img src={posterUrl} alt="" className="w-full h-full object-cover opacity-25 absolute inset-0" />}
+                    <div className="relative z-10 w-16 h-16 rounded-full bg-white/10 hover:bg-white/20 backdrop-blur border border-white/20 flex items-center justify-center transition">
+                      <svg className="w-8 h-8 text-white ml-1" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                    </div>
+                  </div>
+                )}
+              </div>
+              {/* Infos — 50% */}
+              <div className="h-1/2 overflow-y-auto">{infoEl}</div>
+            </div>
           </div>
         </div>
+
       </div>
     )
   }
 
-  // Vue grille
-  return (
-    <div className="flex h-full w-full">
-      {/* Sidebar catégories */}
-      <div className="w-52 flex-shrink-0 bg-gray-900 border-r border-gray-800 overflow-y-auto">
-        <div className="p-3">
-          <button
-            onClick={() => setSelectedCat('all')}
-            className={`w-full text-left px-3 py-2 rounded-lg text-sm mb-1 transition ${selectedCat === 'all' ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-800'}`}
-          >
-            Tous les films
-          </button>
-          <div className="h-px bg-gray-800 my-2" />
-          {categories.map(cat => (
-            <button
-              key={cat.category_id}
-              onClick={() => setSelectedCat(cat.category_id)}
-              className={`w-full text-left px-3 py-2 rounded-lg text-sm mb-0.5 transition truncate ${selectedCat === cat.category_id ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-800'}`}
-            >
-              {cat.category_name}
-            </button>
-          ))}
-        </div>
+  // ── Écran mobile : liste des catégories ──
+  const mobileCategoriesScreen = (
+    <div className="flex flex-col h-full w-full overflow-hidden">
+      <div className="px-4 py-3 border-b border-gray-800 flex-shrink-0">
+        <h2 className="text-white font-semibold text-base">Catégories</h2>
+        <p className="text-gray-500 text-xs mt-0.5">{categories.length} catégories</p>
       </div>
-
-      {/* Grille */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="p-4 border-b border-gray-800">
-          <div className="relative">
-            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-            </svg>
-            <input
-              type="text"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Rechercher un film..."
-              className="w-full bg-gray-800 border border-gray-700 text-white rounded-xl pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:border-blue-500 placeholder-gray-500"
-            />
-          </div>
-          <p className="text-xs text-gray-500 mt-2">{filtered.length} film{filtered.length > 1 ? 's' : ''}</p>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-4">
-          {filtered.length === 0 ? (
-            <div className="flex items-center justify-center h-40 text-gray-500 text-sm">Aucun film trouvé</div>
-          ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
-              {filtered.map(m => (
-                <div
-                  key={m.stream_id}
-                  onClick={() => handleSelect(m)}
-                  className="group relative rounded-xl overflow-hidden bg-gray-800 aspect-[2/3] cursor-pointer hover:ring-2 hover:ring-blue-500 transition"
-                >
-                  {(m.stream_icon || m.cover) ? (
-                    <img src={m.stream_icon || m.cover} alt={m.name} className="w-full h-full object-cover" onError={e => (e.currentTarget.style.display = 'none')} />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center bg-gray-800">
-                      <svg className="w-8 h-8 text-gray-600" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M18 4l2 4h-3l-2-4h-2l2 4h-3l-2-4H8l2 4H7L5 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V4h-4z"/>
-                      </svg>
-                    </div>
-                  )}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2">
-                    <span className="text-white text-xs font-medium line-clamp-2">{m.name}</span>
-                  </div>
-                  {m.rating_5based > 0 && (
-                    <div className="absolute top-1.5 right-1.5 bg-black/70 text-yellow-400 text-xs px-1.5 py-0.5 rounded-md flex items-center gap-0.5">
-                      <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 21 12 17.77 5.82 21 7 14.14l-5-4.87 6.91-1.01L12 2z"/></svg>
-                      {Number(m.rating_5based).toFixed(1)}
-                    </div>
-                  )}
-                </div>
-              ))}
+      <div className="flex-1 overflow-y-auto overscroll-contain">
+        <button
+          onClick={() => handleSelectCat('all', 'Tous les films')}
+          className="w-full flex items-center justify-between px-4 py-4 border-b border-gray-800/60 text-left active:bg-gray-800/50"
+          style={{ touchAction: 'manipulation', minHeight: 56 }}
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-violet-600/20 flex items-center justify-center flex-shrink-0">
+              <svg className="w-4 h-4 text-violet-400" viewBox="0 0 24 24" fill="currentColor"><path d="M18 4l2 4h-3l-2-4h-2l2 4h-3l-2-4H8l2 4H7L5 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V4h-4z"/></svg>
             </div>
-          )}
+            <span className="text-white text-sm font-medium">Tous les films</span>
+          </div>
+          <svg className="w-4 h-4 text-gray-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m9 18 6-6-6-6"/></svg>
+        </button>
+        {categories.map(cat => (
+          <button
+            key={cat.category_id}
+            onClick={() => handleSelectCat(cat.category_id, cat.category_name)}
+            className="w-full flex items-center justify-between px-4 py-4 border-b border-gray-800/60 text-left active:bg-gray-800/50"
+            style={{ touchAction: 'manipulation', minHeight: 56 }}
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-gray-800 flex items-center justify-center flex-shrink-0">
+                <svg className="w-4 h-4 text-gray-500" viewBox="0 0 24 24" fill="currentColor"><path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z"/></svg>
+              </div>
+              <span className="text-gray-200 text-sm">{cat.category_name}</span>
+            </div>
+            <svg className="w-4 h-4 text-gray-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m9 18 6-6-6-6"/></svg>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+
+  // ── Écran mobile : grille des films de la catégorie ──
+  const mobileMoviesScreen = (
+    <div className="flex flex-col h-full w-full overflow-hidden">
+      {/* Header avec retour */}
+      <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-800 bg-gray-900 flex-shrink-0">
+        <button
+          onClick={() => setMobileStep('categories')}
+          className="w-10 h-10 flex items-center justify-center rounded-xl bg-gray-800 text-gray-300 flex-shrink-0"
+          style={{ touchAction: 'manipulation' }}
+        >
+          <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m15 18-6-6 6-6"/></svg>
+        </button>
+        <div className="flex-1 min-w-0">
+          <h2 className="text-white font-semibold text-sm truncate">{selectedCatName}</h2>
+          <p className="text-gray-500 text-xs">{filtered.length} film{filtered.length > 1 ? 's' : ''}</p>
         </div>
       </div>
+      {/* Recherche */}
+      <div className="px-3 py-2.5 border-b border-gray-800 flex-shrink-0">
+        <div className="relative">
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          <input
+            type="search"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Rechercher..."
+            className="w-full bg-gray-800 border border-gray-700 text-white rounded-xl pl-10 pr-4 text-sm focus:outline-none focus:border-violet-500 placeholder-gray-500"
+            style={{ height: 40 }}
+          />
+        </div>
+      </div>
+      {/* Grille */}
+      <div className="flex-1 overflow-y-auto overscroll-contain p-3">
+        {filtered.length === 0 ? (
+          <div className="flex items-center justify-center h-40 text-gray-500 text-sm">Aucun film trouvé</div>
+        ) : (
+          <div className="grid grid-cols-2 gap-2">
+            {filtered.map(m => (
+              <div
+                key={m.stream_id}
+                onClick={() => handleSelect(m)}
+                className="relative rounded-xl overflow-hidden bg-gray-800 aspect-[2/3] cursor-pointer active:scale-95 transition"
+                style={{ touchAction: 'manipulation' }}
+              >
+                {(m.stream_icon || m.cover) ? (
+                  <img src={m.stream_icon || m.cover} alt={m.name} className="w-full h-full object-cover" onError={e => (e.currentTarget.style.display = 'none')} />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center bg-gray-800">
+                    <svg className="w-8 h-8 text-gray-600" viewBox="0 0 24 24" fill="currentColor"><path d="M18 4l2 4h-3l-2-4h-2l2 4h-3l-2-4H8l2 4H7L5 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V4h-4z"/></svg>
+                  </div>
+                )}
+                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent p-2">
+                  <span className="text-white text-xs font-medium line-clamp-2">{m.name}</span>
+                </div>
+                {m.rating_5based > 0 && (
+                  <div className="absolute top-1.5 right-1.5 bg-black/70 text-yellow-400 text-xs px-1.5 py-0.5 rounded-md flex items-center gap-0.5">
+                    <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 21 12 17.77 5.82 21 7 14.14l-5-4.87 6.91-1.01L12 2z"/></svg>
+                    {Number(m.rating_5based).toFixed(1)}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+
+  // Vue grille (layout principal)
+  return (
+    <div className="flex h-full w-full overflow-hidden">
+
+      {/* ── MOBILE : drill-down écran par écran ── */}
+      <div className="sm:hidden flex h-full w-full">
+        {mobileStep === 'categories' && mobileCategoriesScreen}
+        {mobileStep === 'movies' && mobileMoviesScreen}
+      </div>
+
+      {/* ── DESKTOP : sidebar + grille côte à côte ── */}
+      <div className="hidden sm:flex h-full w-full">
+        {/* Sidebar catégories */}
+        <div className="w-52 flex-shrink-0 bg-gray-900 border-r border-gray-800 flex flex-col overflow-y-auto">
+          <div className="p-3">
+            <button onClick={() => setSelectedCat('all')} className={`w-full text-left px-3 py-2 rounded-lg text-sm mb-1 transition ${selectedCat === 'all' ? 'bg-violet-600 text-white' : 'text-gray-300 hover:bg-gray-800'}`}>
+              Tous les films
+            </button>
+            <div className="h-px bg-gray-800 my-2" />
+            {categories.map(cat => (
+              <button key={cat.category_id} onClick={() => setSelectedCat(cat.category_id)} className={`w-full text-left px-3 py-2 rounded-lg text-sm mb-0.5 transition truncate ${selectedCat === cat.category_id ? 'bg-violet-600 text-white' : 'text-gray-300 hover:bg-gray-800'}`}>
+                {cat.category_name}
+              </button>
+            ))}
+          </div>
+        </div>
+        {/* Contenu */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <div className="px-4 py-3 border-b border-gray-800 flex-shrink-0">
+            <div className="relative">
+              <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+              <input type="search" value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher un film..." className="w-full bg-gray-800 border border-gray-700 text-white rounded-xl pl-10 pr-4 text-sm focus:outline-none focus:border-violet-500 placeholder-gray-500" style={{ height: 44 }} />
+            </div>
+            <p className="text-xs text-gray-500 mt-2">{filtered.length} film{filtered.length > 1 ? 's' : ''}</p>
+          </div>
+          <div className="flex-1 overflow-y-auto overscroll-contain p-4">
+            {filtered.length === 0 ? (
+              <div className="flex items-center justify-center h-40 text-gray-500 text-sm">Aucun film trouvé</div>
+            ) : (
+              <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+                {filtered.map(m => (
+                  <div key={m.stream_id} onClick={() => handleSelect(m)} className="group relative rounded-xl overflow-hidden bg-gray-800 aspect-[2/3] cursor-pointer hover:ring-2 hover:ring-violet-500 transition">
+                    {(m.stream_icon || m.cover) ? (
+                      <img src={m.stream_icon || m.cover} alt={m.name} className="w-full h-full object-cover" onError={e => (e.currentTarget.style.display = 'none')} />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center bg-gray-800">
+                        <svg className="w-8 h-8 text-gray-600" viewBox="0 0 24 24" fill="currentColor"><path d="M18 4l2 4h-3l-2-4h-2l2 4h-3l-2-4H8l2 4H7L5 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V4h-4z"/></svg>
+                      </div>
+                    )}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2">
+                      <span className="text-white text-xs font-medium line-clamp-2">{m.name}</span>
+                    </div>
+                    {m.rating_5based > 0 && (
+                      <div className="absolute top-1.5 right-1.5 bg-black/70 text-yellow-400 text-xs px-1.5 py-0.5 rounded-md flex items-center gap-0.5">
+                        <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 21 12 17.77 5.82 21 7 14.14l-5-4.87 6.91-1.01L12 2z"/></svg>
+                        {Number(m.rating_5based).toFixed(1)}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
     </div>
   )
 }

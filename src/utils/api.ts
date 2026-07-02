@@ -9,6 +9,12 @@ import type {
   EPGItem,
 } from '../types/xtream'
 
+// Le proxy n'est nécessaire que si la page est servie en HTTPS :
+// le navigateur bloque alors les requêtes HTTP directes (mixed content).
+export function needsProxy(): boolean {
+  return window.location.protocol === 'https:'
+}
+
 export class XtreamAPI {
   private creds: XtreamCredentials
 
@@ -22,9 +28,26 @@ export class XtreamAPI {
   }
 
   private async fetch<T>(params: string): Promise<T> {
-    const res = await fetch(`${this.base}&${params}`)
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    return res.json()
+    const directUrl = `${this.base}&${params}`
+    // Page HTTPS → proxy obligatoire (mixed content bloqué par le navigateur).
+    // Page HTTP (dev ou hébergement HTTP) → appel direct, le serveur IPTV envoie CORS *.
+    const url = needsProxy() ? `/proxy?target=${encodeURIComponent(directUrl)}` : directUrl
+    // Le serveur IPTV est instable (max_connections=1, rate-limit) → retry avec backoff
+    let lastErr: unknown
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (attempt > 0) await new Promise(r => setTimeout(r, attempt * 1500))
+      try {
+        const ctrl = new AbortController()
+        const timer = setTimeout(() => ctrl.abort(), 20000)
+        const res = await fetch(url, { signal: ctrl.signal })
+        clearTimeout(timer)
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        return await res.json()
+      } catch (e) {
+        lastErr = e
+      }
+    }
+    throw lastErr
   }
 
   async getAccountInfo(): Promise<XtreamAccountInfo> {
@@ -70,19 +93,21 @@ export class XtreamAPI {
     return this.fetch<{ epg_listings: EPGItem[] }>(`action=get_short_epg&stream_id=${streamId}&limit=5`)
   }
 
+  private streamUrl(path: string): string {
+    const base = this.creds.url.replace(/\/$/, '')
+    return `${base}/${path}`
+  }
+
   getLiveStreamUrl(streamId: number, ext = 'ts'): string {
-    const url = this.creds.url.replace(/\/$/, '')
-    return `${url}/live/${this.creds.username}/${this.creds.password}/${streamId}.${ext}`
+    return this.streamUrl(`live/${this.creds.username}/${this.creds.password}/${streamId}.${ext}`)
   }
 
   getVodStreamUrl(streamId: number, ext = 'mp4'): string {
-    const url = this.creds.url.replace(/\/$/, '')
-    return `${url}/movie/${this.creds.username}/${this.creds.password}/${streamId}.${ext}`
+    return this.streamUrl(`movie/${this.creds.username}/${this.creds.password}/${streamId}.${ext}`)
   }
 
   getSeriesStreamUrl(streamId: number, ext = 'mp4'): string {
-    const url = this.creds.url.replace(/\/$/, '')
-    return `${url}/series/${this.creds.username}/${this.creds.password}/${streamId}.${ext}`
+    return this.streamUrl(`series/${this.creds.username}/${this.creds.password}/${streamId}.${ext}`)
   }
 }
 

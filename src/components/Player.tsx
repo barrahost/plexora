@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import Hls from 'hls.js'
 import type { XtreamChannel, XtreamMovie, EPGItem } from '../types/xtream'
-import { XtreamAPI } from '../utils/api'
+import { XtreamAPI, needsProxy } from '../utils/api'
 import type { XtreamCredentials } from '../types/xtream'
 
 interface Props {
@@ -26,17 +26,21 @@ export default function Player({ streamUrl, title, cover, channel, creds, onClos
     const video = videoRef.current
     if (!video) return
 
-    if (Hls.isSupported()) {
+    const isHlsStream = streamUrl.includes('.m3u8')
+    // Page HTTPS → passer par le proxy pour éviter le mixed content
+    const url = needsProxy()
+      ? (isHlsStream ? `/hls?url=${encodeURIComponent(streamUrl)}` : `/proxy?target=${encodeURIComponent(streamUrl)}`)
+      : streamUrl
+
+    if (isHlsStream && Hls.isSupported()) {
       const hls = new Hls({ enableWorker: true, lowLatencyMode: true })
       hlsRef.current = hls
-      hls.loadSource(streamUrl)
+      hls.loadSource(url)
       hls.attachMedia(video)
       hls.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(() => {}))
-    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      video.src = streamUrl
-      video.play().catch(() => {})
     } else {
-      video.src = streamUrl
+      // VOD (.mp4/.mkv) ou HLS natif (Safari) : lecture directe
+      video.src = url
       video.play().catch(() => {})
     }
 
@@ -113,7 +117,7 @@ export default function Player({ streamUrl, title, cover, channel, creds, onClos
         {currentEpg && (
           <div className="mb-3">
             <div className="flex items-center gap-2 text-xs text-gray-300 mb-1">
-              <span className="bg-blue-600 text-white px-2 py-0.5 rounded text-xs font-medium">EN COURS</span>
+              <span className="bg-violet-600 text-white px-2 py-0.5 rounded text-xs font-medium">EN COURS</span>
               <span>{decodeHtml(currentEpg.title)}</span>
               <span className="text-gray-500">·</span>
               <span>{formatTime(currentEpg.start)} - {formatTime(currentEpg.end)}</span>
