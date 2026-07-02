@@ -17,9 +17,10 @@ interface VodInfo {
 interface Props {
   creds: XtreamCredentials
   onPlay: (url: string, title: string, cover?: string) => void
+  jump?: { item: XtreamMovie; ts: number } | null
 }
 
-export default function Movies({ creds, onPlay }: Props) {
+export default function Movies({ creds, onPlay, jump }: Props) {
   const api = useMemo(() => new XtreamAPI(creds), [creds])
   const [categories, setCategories] = useState<XtreamCategory[]>([])
   const [movies, setMovies] = useState<XtreamMovie[]>([])
@@ -35,6 +36,15 @@ export default function Movies({ creds, onPlay }: Props) {
   const [favorites, setFavorites] = useState<number[]>(getFavorites())
   const videoRef = useRef<HTMLVideoElement>(null)
   const hlsRef = useRef<Hls | null>(null)
+
+  // Saut depuis la recherche globale
+  useEffect(() => {
+    if (!jump) return
+    setSelectedCat('all')
+    setSelected(jump.item)
+    setPlaying(false)
+    setMobileStep('detail')
+  }, [jump])
 
   useEffect(() => {
     async function load() {

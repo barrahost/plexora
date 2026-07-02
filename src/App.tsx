@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import type { XtreamCredentials, XtreamChannel, XtreamAccountInfo, ViewType } from './types/xtream'
+import type { XtreamCredentials, XtreamChannel, XtreamMovie, XtreamSeries, XtreamAccountInfo, ViewType } from './types/xtream'
 import { loadCredentials, clearCredentials, XtreamAPI, getActivePlaylistId, getPlaylists, stopVideo } from './utils/api'
 import Login from './components/Login'
 import LiveTV from './components/LiveTV'
@@ -7,6 +7,7 @@ import Movies from './components/Movies'
 import SeriesView from './components/Series'
 import Player from './components/Player'
 import PlaylistManager from './components/PlaylistManager'
+import GlobalSearch from './components/GlobalSearch'
 
 interface PlayInfo {
   url: string
@@ -43,6 +44,23 @@ export default function App() {
   const [view, setView] = useState<ViewType>('live')
   const [playing, setPlaying] = useState<PlayInfo | null>(null)
   const [accountInfo, setAccountInfo] = useState<XtreamAccountInfo | null>(null)
+  const [searchOpen, setSearchOpen] = useState(false)
+  // "Sauts" déclenchés par la recherche globale (ts force le re-déclenchement)
+  const [jumpChannel, setJumpChannel] = useState<{ item: XtreamChannel; ts: number } | null>(null)
+  const [jumpMovie, setJumpMovie] = useState<{ item: XtreamMovie; ts: number } | null>(null)
+  const [jumpSeries, setJumpSeries] = useState<{ item: XtreamSeries; ts: number } | null>(null)
+
+  // Raccourci Ctrl+K (ou "/") : recherche globale
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName
+      const typing = tag === 'INPUT' || tag === 'TEXTAREA'
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setSearchOpen(o => !o) }
+      else if (e.key === '/' && !typing) { e.preventDefault(); setSearchOpen(true) }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   useEffect(() => {
     if (!creds) return
@@ -118,6 +136,17 @@ export default function App() {
         </nav>
 
         <div className="ml-auto flex items-center gap-2">
+          {/* Recherche globale */}
+          <button
+            onClick={() => setSearchOpen(true)}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm text-gray-400 hover:text-white hover:bg-gray-800 transition-colors border border-gray-800"
+            style={{ touchAction: 'manipulation' }}
+            title="Recherche globale (Ctrl+K)"
+          >
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+            <span className="hidden md:block text-xs text-gray-500">Rechercher</span>
+            <kbd className="hidden md:block text-[10px] text-gray-500 bg-gray-800 border border-gray-700 rounded px-1.5 py-0.5">Ctrl K</kbd>
+          </button>
           {activeName && (
             <button
               onClick={() => setView('playlists')}
@@ -156,11 +185,21 @@ export default function App() {
       {/* ── Main content ── */}
       {/* pb-16 on mobile reserves space above bottom nav */}
       <main className="flex-1 overflow-hidden flex pb-16 sm:pb-0">
-        {view === 'live'      && <LiveTV creds={creds} onPlay={handlePlay} />}
-        {view === 'movies'    && <Movies creds={creds} onPlay={handlePlay} />}
-        {view === 'series'    && <SeriesView creds={creds} onPlay={handlePlay} />}
+        {view === 'live'      && <LiveTV creds={creds} onPlay={handlePlay} jump={jumpChannel} />}
+        {view === 'movies'    && <Movies creds={creds} onPlay={handlePlay} jump={jumpMovie} />}
+        {view === 'series'    && <SeriesView creds={creds} onPlay={handlePlay} jump={jumpSeries} />}
         {view === 'playlists' && <PlaylistManager onSwitch={handlePlaylistSwitch} />}
       </main>
+
+      {/* ── Recherche globale (Ctrl+K) ── */}
+      <GlobalSearch
+        creds={creds}
+        open={searchOpen}
+        onClose={() => setSearchOpen(false)}
+        onSelectChannel={ch => { setView('live'); setJumpChannel({ item: ch, ts: Date.now() }) }}
+        onSelectMovie={m => { setView('movies'); setJumpMovie({ item: m, ts: Date.now() }) }}
+        onSelectSeries={s => { setView('series'); setJumpSeries({ item: s, ts: Date.now() }) }}
+      />
 
       {/* ── Bottom nav (mobile only) ── */}
       <nav

@@ -7,11 +7,12 @@ import Hls from 'hls.js'
 interface Props {
   creds: XtreamCredentials
   onPlay: (url: string, title: string, cover?: string, channel?: XtreamChannel) => void
+  jump?: { item: XtreamChannel; ts: number } | null
 }
 
 type MobileStep = 'categories' | 'channels' | 'player'
 
-export default function LiveTV({ creds, onPlay }: Props) {
+export default function LiveTV({ creds, onPlay, jump }: Props) {
   const api = useMemo(() => new XtreamAPI(creds), [creds])
   const [categories, setCategories] = useState<XtreamCategory[]>([])
   const [channels, setChannels] = useState<XtreamChannel[]>([])
@@ -27,9 +28,19 @@ export default function LiveTV({ creds, onPlay }: Props) {
   const [mobileStep, setMobileStep] = useState<MobileStep>('categories')
   const [videoReady, setVideoReady] = useState(false)
   const [showBanner, setShowBanner] = useState(false)
+  const [numBuffer, setNumBuffer] = useState('')
   const videoRef = useRef<HTMLVideoElement>(null)
   const hlsRef = useRef<Hls | null>(null)
   const bannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const numTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Saut depuis la recherche globale
+  useEffect(() => {
+    if (!jump) return
+    setSelectedCat('all')
+    setActiveChannel(jump.item)
+    setMobileStep('player')
+  }, [jump])
 
   useEffect(() => {
     async function load() {
@@ -110,6 +121,38 @@ export default function LiveTV({ creds, onPlay }: Props) {
     if (search.trim()) { const q = search.toLowerCase(); list = list.filter(c => c.name.toLowerCase().includes(q)) }
     return list
   }, [channels, selectedCat, search, favorites])
+
+  // Zapping numérique : taper le numéro de chaîne (1.5s de délai ou Entrée pour valider)
+  const filteredRef = useRef(filtered)
+  filteredRef.current = filtered
+  const numBufferRef = useRef('')
+  useEffect(() => {
+    const zap = () => {
+      const n = parseInt(numBufferRef.current, 10)
+      numBufferRef.current = ''
+      setNumBuffer('')
+      const ch = filteredRef.current[n - 1]
+      if (ch) { setActiveChannel(ch); setMobileStep('player') }
+    }
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || e.ctrlKey || e.metaKey || e.altKey) return
+      if (/^[0-9]$/.test(e.key)) {
+        numBufferRef.current = (numBufferRef.current + e.key).slice(0, 4)
+        setNumBuffer(numBufferRef.current)
+        if (numTimer.current) clearTimeout(numTimer.current)
+        numTimer.current = setTimeout(zap, 1500)
+      } else if (e.key === 'Enter' && numBufferRef.current) {
+        if (numTimer.current) clearTimeout(numTimer.current)
+        zap()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      if (numTimer.current) clearTimeout(numTimer.current)
+    }
+  }, [])
 
   function handleFavorite(e: React.MouseEvent, id: number) {
     e.stopPropagation()
@@ -520,7 +563,13 @@ export default function LiveTV({ creds, onPlay }: Props) {
   )
 
   return (
-    <div className="flex h-full w-full overflow-hidden">
+    <div className="flex h-full w-full overflow-hidden relative">
+      {/* Zapping numérique : numéro tapé affiché façon box TV */}
+      {numBuffer && (
+        <div className="absolute top-4 right-4 z-30 bg-black/80 border border-gray-700 rounded-xl px-4 py-2 shadow-2xl">
+          <span className="text-3xl font-bold text-white tracking-widest font-mono">{numBuffer}</span>
+        </div>
+      )}
       {/* Mobile: drill-down (< sm) */}
       <div className="sm:hidden flex-1 flex flex-col overflow-hidden bg-gray-950">
         {mobileStep === 'categories' && mobileCategories}

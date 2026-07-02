@@ -37,9 +37,10 @@ interface SeriesInfoData {
 interface Props {
   creds: XtreamCredentials
   onPlay: (url: string, title: string, cover?: string) => void
+  jump?: { item: XtreamSeries; ts: number } | null
 }
 
-export default function SeriesView({ creds, onPlay }: Props) {
+export default function SeriesView({ creds, onPlay, jump }: Props) {
   const api = useMemo(() => new XtreamAPI(creds), [creds])
   const [categories, setCategories] = useState<XtreamCategory[]>([])
   const [series, setSeries] = useState<XtreamSeries[]>([])
@@ -129,6 +130,14 @@ export default function SeriesView({ creds, onPlay }: Props) {
     setSelected(s)
     setMobileStep('detail')
   }
+
+  // Saut depuis la recherche globale
+  useEffect(() => {
+    if (!jump) return
+    setSelectedCat('all')
+    setSelected(jump.item)
+    setMobileStep('detail')
+  }, [jump])
 
   const filtered = useMemo(() => {
     let list = series
