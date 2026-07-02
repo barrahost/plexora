@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo, useRef } from 'react'
 import type { XtreamCredentials, XtreamCategory, XtreamSeries } from '../types/xtream'
 import { XtreamAPI, needsProxy, stopVideo } from '../utils/api'
-import { GridSkeleton } from './ui'
+import { GridSkeleton, CodecBadge, openInVlc } from './ui'
 import Hls from 'hls.js'
 
 interface EpisodeData {
@@ -16,6 +16,8 @@ interface EpisodeData {
     plot?: string
     releasedate?: string
     rating?: string
+    audio?: { codec_name?: string }
+    video?: { codec_name?: string }
   }
 }
 
@@ -54,6 +56,7 @@ export default function SeriesView({ creds, onPlay, jump }: Props) {
   const [loadingInfo, setLoadingInfo] = useState(false)
   const [selectedSeason, setSelectedSeason] = useState<string>('1')
   const [infoError, setInfoError] = useState(false)
+  const [vlcMsg, setVlcMsg] = useState<string | null>(null)
   const [activeEp, setActiveEp] = useState<EpisodeData | null>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
   const hlsRef = useRef<Hls | null>(null)
@@ -504,9 +507,26 @@ export default function SeriesView({ creds, onPlay, jump }: Props) {
             <div className="h-1/2 overflow-y-auto p-4">
               <h2 className="text-white font-bold text-lg mb-1">{selected.name}</h2>
               {activeEp && (
-                <p className="text-yellow-400 text-sm font-medium mb-2">
-                  S{selectedSeason.padStart(2,'0')}·E{String(activeEp.episode_num).padStart(2,'0')} — {activeEp.title || `Épisode ${activeEp.episode_num}`}
-                </p>
+                <>
+                  <p className="text-yellow-400 text-sm font-medium mb-2">
+                    S{selectedSeason.padStart(2,'0')}·E{String(activeEp.episode_num).padStart(2,'0')} — {activeEp.title || `Épisode ${activeEp.episode_num}`}
+                  </p>
+                  <CodecBadge audio={activeEp.info?.audio?.codec_name} />
+                  <div className="flex items-center gap-2 mb-3">
+                    <button
+                      onClick={async () => {
+                        const r = await openInVlc(api.getSeriesStreamUrl(Number(activeEp.id), activeEp.container_extension || 'mp4'))
+                        setVlcMsg(r === 'copied' ? 'Lien copié — si VLC ne s\'ouvre pas : VLC > Média > Ouvrir un flux réseau > Ctrl+V' : null)
+                      }}
+                      className="flex items-center gap-2 bg-orange-600/80 hover:bg-orange-600 text-white text-xs px-3 py-2 rounded-lg transition"
+                      style={{ touchAction: 'manipulation' }}
+                    >
+                      <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.5 7h-5L12 2zm-4 12l1.5-4h5L16 14H8zm-3 8l1.8-5h10.4l1.8 5H5z"/></svg>
+                      Ouvrir dans VLC
+                    </button>
+                    {vlcMsg && <span className="text-gray-500 text-xs">{vlcMsg}</span>}
+                  </div>
+                </>
               )}
               <div className="flex flex-wrap gap-x-4 gap-y-1 mb-3">
                 {releaseDate && <div className="text-sm"><span className="text-yellow-400 font-semibold">Date de sortie : </span><span className="text-gray-300">{releaseDate}</span></div>}

@@ -53,6 +53,48 @@ export function ChannelLogo({ name, icon, className = '', textClass = 'text-xs' 
   )
 }
 
+// ── Lecture externe (VLC) ────────────────────────────────────────────────────
+
+function isAndroid(): boolean {
+  return /android/i.test(navigator.userAgent)
+}
+
+// Ouvre le flux dans VLC. Android : intent natif fiable.
+// Desktop : tente vlc:// (si le handler est installé) puis copie le lien en secours.
+export async function openInVlc(streamUrl: string): Promise<'opened' | 'copied'> {
+  if (isAndroid()) {
+    const noScheme = streamUrl.replace(/^https?:\/\//, '')
+    window.location.href = `intent://${noScheme}#Intent;package=org.videolan.vlc;action=android.intent.action.VIEW;scheme=http;type=video/*;end`
+    return 'opened'
+  }
+  try { await navigator.clipboard.writeText(streamUrl) } catch { /* clipboard indisponible */ }
+  window.location.href = `vlc://${streamUrl}`
+  return 'copied'
+}
+
+// ── Avertissement codec ──────────────────────────────────────────────────────
+
+const BROWSER_UNSUPPORTED_AUDIO = ['ac3', 'eac3', 'ac-3', 'ec-3', 'dts', 'truehd', 'mlp']
+
+export function audioCodecWarning(codecName?: string): string | null {
+  if (!codecName) return null
+  if (BROWSER_UNSUPPORTED_AUDIO.includes(codecName.toLowerCase())) {
+    return `Son ${codecName.toUpperCase()} (Dolby/DTS) — non lisible dans le navigateur. Utilise VLC.`
+  }
+  return null
+}
+
+export function CodecBadge({ audio }: { audio?: string }) {
+  const warning = audioCodecWarning(audio)
+  if (!warning) return null
+  return (
+    <div className="flex items-center gap-2 bg-amber-900/30 border border-amber-700/40 text-amber-400 text-xs rounded-lg px-3 py-2 my-2">
+      <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
+      {warning}
+    </div>
+  )
+}
+
 // ── Skeletons ────────────────────────────────────────────────────────────────
 
 export function ChannelRowSkeleton() {

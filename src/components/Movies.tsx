@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo, useRef } from 'react'
 import type { XtreamCredentials, XtreamCategory, XtreamMovie } from '../types/xtream'
 import { XtreamAPI, getFavorites, toggleFavorite, needsProxy, stopVideo } from '../utils/api'
-import { GridSkeleton } from './ui'
+import { GridSkeleton, CodecBadge, openInVlc } from './ui'
 import Hls from 'hls.js'
 
 interface VodInfo {
@@ -12,6 +12,7 @@ interface VodInfo {
   release_date?: string
   releasedate?: string
   description?: string
+  audioCodec?: string
 }
 
 interface Props {
@@ -34,6 +35,7 @@ export default function Movies({ creds, onPlay, jump }: Props) {
   const [infoLoading, setInfoLoading] = useState(false)
   const [playing, setPlaying] = useState(false)
   const [favorites, setFavorites] = useState<number[]>(getFavorites())
+  const [vlcMsg, setVlcMsg] = useState<string | null>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
   const hlsRef = useRef<Hls | null>(null)
 
@@ -77,6 +79,7 @@ export default function Movies({ creds, onPlay, jump }: Props) {
           director: str(info.director || movie.director || selected.director),
           genre: str(info.genre || movie.genre || selected.genre),
           release_date: str(info.release_date || info.releasedate || movie.release_date || selected.release_date),
+          audioCodec: str((info.audio as Record<string, unknown> | undefined)?.codec_name),
         }
         setVodInfo(merged)
       })
@@ -191,6 +194,21 @@ export default function Movies({ creds, onPlay, jump }: Props) {
             Chargement des infos...
           </div>
         )}
+        <CodecBadge audio={info.audioCodec} />
+        <div className="flex items-center gap-2">
+          <button
+            onClick={async () => {
+              const r = await openInVlc(api.getVodStreamUrl(selected.stream_id, selected.container_extension || 'mp4'))
+              setVlcMsg(r === 'copied' ? 'Lien copié — si VLC ne s\'ouvre pas : VLC > Média > Ouvrir un flux réseau > Ctrl+V' : null)
+            }}
+            className="flex items-center gap-2 bg-orange-600/80 hover:bg-orange-600 text-white text-xs px-3 py-2 rounded-lg transition"
+            style={{ touchAction: 'manipulation' }}
+          >
+            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.5 7h-5L12 2zm-4 12l1.5-4h5L16 14H8zm-3 8l1.8-5h10.4l1.8 5H5z"/></svg>
+            Ouvrir dans VLC
+          </button>
+          {vlcMsg && <span className="text-gray-500 text-xs">{vlcMsg}</span>}
+        </div>
         {(info.release_date || selected.release_date) && <p className="text-sm"><span className="text-yellow-400 font-semibold">Release Date : </span><span className="text-gray-300">{info.release_date || selected.release_date}</span></p>}
         {(info.genre || selected.genre) && <p className="text-sm"><span className="text-yellow-400 font-semibold">Genre : </span><span className="text-gray-300">{info.genre || selected.genre}</span></p>}
         {(info.plot || selected.plot) && <p className="text-sm"><span className="text-yellow-400 font-semibold">Description : </span><span className="text-gray-300 leading-relaxed">{info.plot || selected.plot}</span></p>}
