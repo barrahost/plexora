@@ -8,7 +8,7 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
-dist
+# dist est commite : le deploiement cPanel Git copie dist/ vers public_html/plexora
 dist-ssr
 *.local
 

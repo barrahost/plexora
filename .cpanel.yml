@@ -1,0 +1,5 @@
+---
+deployment:
+  tasks:
+    - export DEPLOYPATH=/home/dinfras/public_html/plexora/
+    - /bin/cp -R dist/* $DEPLOYPATH
