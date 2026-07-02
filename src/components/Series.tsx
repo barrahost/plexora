@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo, useRef } from 'react'
 import type { XtreamCredentials, XtreamCategory, XtreamSeries } from '../types/xtream'
 import { XtreamAPI, needsProxy, stopVideo } from '../utils/api'
+import { GridSkeleton } from './ui'
 import Hls from 'hls.js'
 
 interface EpisodeData {
@@ -151,17 +152,7 @@ export default function SeriesView({ creds, onPlay }: Props) {
   const cast = info?.cast || selected?.cast || ''
   const releaseDate = info?.release_date || selected?.release_date || ''
 
-  if (loading) return (
-    <div className="flex-1 flex items-center justify-center">
-      <div className="text-center">
-        <svg className="animate-spin w-8 h-8 text-violet-500 mx-auto mb-3" viewBox="0 0 24 24" fill="none">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
-        </svg>
-        <p className="text-gray-400 text-sm">Chargement des séries...</p>
-      </div>
-    </div>
-  )
+  if (loading) return <div className="flex-1 overflow-hidden"><GridSkeleton count={18} /></div>
 
   // ── Grille commune (utilisée mobile + desktop) ──
   const seriesGrid = (cols: string) => (
@@ -170,7 +161,7 @@ export default function SeriesView({ creds, onPlay }: Props) {
         <div
           key={s.series_id}
           onClick={() => handleSelectSeries(s)}
-          className="group relative rounded-xl overflow-hidden bg-gray-800 aspect-[2/3] cursor-pointer hover:ring-2 hover:ring-violet-500 transition active:scale-95"
+          className="group relative rounded-xl overflow-hidden bg-gray-800 aspect-[2/3] cursor-pointer hover:ring-2 hover:ring-violet-500 hover:scale-[1.03] hover:shadow-xl hover:shadow-violet-900/30 hover:z-10 transition-all duration-200 active:scale-95"
           style={{ touchAction: 'manipulation' }}
         >
           {cover(s) ? (

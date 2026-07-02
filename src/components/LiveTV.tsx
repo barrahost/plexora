@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo, useRef } from 'react'
 import type { XtreamCredentials, XtreamCategory, XtreamChannel, EPGItem } from '../types/xtream'
 import { XtreamAPI, getFavorites, toggleFavorite, needsProxy, stopVideo } from '../utils/api'
+import { ChannelLogo, LiveTVSkeleton } from './ui'
 import Hls from 'hls.js'
 
 interface Props {
@@ -24,8 +25,11 @@ export default function LiveTV({ creds, onPlay }: Props) {
   const [epgLoading, setEpgLoading] = useState(false)
   const [playerError, setPlayerError] = useState<string | null>(null)
   const [mobileStep, setMobileStep] = useState<MobileStep>('categories')
+  const [videoReady, setVideoReady] = useState(false)
+  const [showBanner, setShowBanner] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
   const hlsRef = useRef<Hls | null>(null)
+  const bannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     async function load() {
@@ -45,8 +49,15 @@ export default function LiveTV({ creds, onPlay }: Props) {
     setPlayerError(null)
     setEpg([])
     setEpgLoading(true)
+    setVideoReady(false)
+    // Bannière info façon box TV : visible au zapping, disparaît après 4s
+    setShowBanner(true)
+    if (bannerTimer.current) clearTimeout(bannerTimer.current)
+    bannerTimer.current = setTimeout(() => setShowBanner(false), 4000)
     const video = videoRef.current
     let cancelled = false
+    const onPlaying = () => setVideoReady(true)
+    video.addEventListener('playing', onPlaying)
 
     // 1) Charger l'EPG AVANT d'ouvrir le flux : avec max_connections=1,
     // le serveur refuse souvent les requêtes API pendant qu'un flux est ouvert.
@@ -78,7 +89,12 @@ export default function LiveTV({ creds, onPlay }: Props) {
     }
     Promise.race([epgPromise, new Promise(r => setTimeout(r, 5000))]).then(startPlayback)
 
-    return () => { cancelled = true; hlsRef.current?.destroy(); hlsRef.current = null; stopVideo(video) }
+    return () => {
+      cancelled = true
+      video.removeEventListener('playing', onPlaying)
+      hlsRef.current?.destroy(); hlsRef.current = null
+      stopVideo(video)
+    }
   }, [activeChannel, api])
 
   const countByCat = useMemo(() => {
@@ -123,17 +139,7 @@ export default function LiveTV({ creds, onPlay }: Props) {
     ?? epg.find(e => Number(e.now_playing) === 1) // fallback si timestamps absents
   const upcoming = epg.filter(e => e.start_timestamp > nowSec).slice(0, 3)
 
-  if (loading) return (
-    <div className="flex-1 flex items-center justify-center">
-      <div className="text-center">
-        <svg className="animate-spin w-8 h-8 text-violet-500 mx-auto mb-3" viewBox="0 0 24 24" fill="none">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
-        </svg>
-        <p className="text-gray-400 text-sm">Chargement des chaînes...</p>
-      </div>
-    </div>
-  )
+  if (loading) return <LiveTVSkeleton />
 
   /* ─────────────── MOBILE VIEW ─────────────── */
   const mobileCategories = (
@@ -241,13 +247,7 @@ export default function LiveTV({ creds, onPlay }: Props) {
               className={`flex items-center gap-3 px-4 border-b border-gray-800/40 transition-colors ${active ? 'bg-orange-500/20 border-l-4 border-l-orange-400' : 'active:bg-gray-800'}`}
               style={{ minHeight: 60, touchAction: 'manipulation', cursor: 'pointer' }}
             >
-              <div className="w-10 h-10 flex-shrink-0 rounded-lg bg-gray-800 overflow-hidden">
-                {ch.stream_icon ? (
-                  <img src={ch.stream_icon} alt="" className="w-full h-full object-contain p-1" onError={e => (e.currentTarget.style.display = 'none')} />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-gray-500 text-xs font-bold">{ch.name.slice(0, 2).toUpperCase()}</div>
-                )}
-              </div>
+              <ChannelLogo name={ch.name} icon={ch.stream_icon} className="w-10 h-10 flex-shrink-0 rounded-lg overflow-hidden" />
               <div className="flex-1 min-w-0">
                 <div className={`text-sm font-medium truncate ${active ? 'text-orange-400' : 'text-gray-200'}`}>{ch.name}</div>
               </div>
@@ -280,11 +280,7 @@ export default function LiveTV({ creds, onPlay }: Props) {
           <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m15 18-6-6 6-6"/></svg>
         </button>
         <div className="flex items-center gap-2 flex-1 min-w-0">
-          {activeChannel?.stream_icon && (
-            <div className="w-8 h-8 bg-gray-800 rounded-lg overflow-hidden flex-shrink-0">
-              <img src={activeChannel.stream_icon} alt="" className="w-full h-full object-contain" onError={e => (e.currentTarget.style.display = 'none')} />
-            </div>
-          )}
+          {activeChannel && <ChannelLogo name={activeChannel.name} icon={activeChannel.stream_icon} className="w-8 h-8 rounded-lg overflow-hidden flex-shrink-0" />}
           <div className="min-w-0">
             <div className="text-white font-semibold text-sm truncate">{activeChannel?.name}</div>
             {nowPlaying && <div className="text-gray-500 text-xs truncate">{decodeHtml(nowPlaying.title)}</div>}
@@ -303,8 +299,22 @@ export default function LiveTV({ creds, onPlay }: Props) {
       </div>
 
       {/* Player */}
-      <div className="flex-shrink-0 bg-black w-full" style={{ aspectRatio: '16/9' }}>
-        <video ref={videoRef} className="w-full h-full object-contain" />
+      <div className="flex-shrink-0 bg-black w-full relative overflow-hidden" style={{ aspectRatio: '16/9' }}>
+        <video ref={videoRef} className={`w-full h-full object-contain transition-opacity duration-300 ${videoReady ? 'opacity-100' : 'opacity-0'}`} />
+        {!videoReady && !playerError && activeChannel && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-gray-950">
+            <ChannelLogo name={activeChannel.name} icon={activeChannel.stream_icon} className="w-14 h-14 rounded-xl overflow-hidden shadow-2xl" textClass="text-lg" />
+            <div className="flex items-center gap-2 text-gray-500 text-xs">
+              <svg className="animate-spin w-3 h-3" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>
+              Connexion...
+            </div>
+          </div>
+        )}
+        {playerError && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/80 p-4">
+            <div className="text-red-400 text-xs font-mono bg-red-900/30 px-3 py-2 rounded">{playerError}</div>
+          </div>
+        )}
       </div>
 
       {/* EPG */}
@@ -404,9 +414,7 @@ export default function LiveTV({ creds, onPlay }: Props) {
             const isFav = favorites.includes(ch.stream_id)
             return (
               <div key={ch.stream_id} onClick={() => setActiveChannel(ch)} className={`flex items-center gap-3 px-3 py-2.5 border-b border-gray-800/40 cursor-pointer transition-colors group ${active ? 'bg-orange-500/20 border-l-4 border-l-orange-400' : 'hover:bg-gray-800/60'}`} style={{ touchAction: 'manipulation' }}>
-                <div className="w-9 h-9 flex-shrink-0 rounded-md bg-gray-800 overflow-hidden">
-                  {ch.stream_icon ? <img src={ch.stream_icon} alt="" className="w-full h-full object-contain p-0.5" onError={e => (e.currentTarget.style.display = 'none')} /> : <div className="w-full h-full flex items-center justify-center text-gray-600 text-xs font-bold">{ch.name.slice(0, 2).toUpperCase()}</div>}
-                </div>
+                <ChannelLogo name={ch.name} icon={ch.stream_icon} className="w-9 h-9 flex-shrink-0 rounded-md overflow-hidden" />
                 <div className="flex-1 min-w-0">
                   <div className={`text-sm font-medium truncate ${active ? 'text-orange-400' : 'text-gray-200'}`}>{ch.name}</div>
                 </div>
@@ -431,8 +439,18 @@ export default function LiveTV({ creds, onPlay }: Props) {
           </div>
         ) : (
           <>
-            <div className="h-1/2 relative bg-black w-full overflow-hidden flex-shrink-0">
-              <video ref={videoRef} className="w-full h-full object-contain" />
+            <div className="h-1/2 relative bg-black w-full overflow-hidden flex-shrink-0 group/player">
+              <video ref={videoRef} className={`w-full h-full object-contain transition-opacity duration-300 ${videoReady ? 'opacity-100' : 'opacity-0'}`} />
+              {/* Overlay de chargement : logo chaîne pendant l'ouverture du flux */}
+              {!videoReady && !playerError && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-gray-950">
+                  <ChannelLogo name={activeChannel.name} icon={activeChannel.stream_icon} className="w-20 h-20 rounded-2xl overflow-hidden shadow-2xl" textClass="text-2xl" />
+                  <div className="flex items-center gap-2 text-gray-500 text-xs">
+                    <svg className="animate-spin w-3.5 h-3.5" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>
+                    Connexion au flux...
+                  </div>
+                </div>
+              )}
               {playerError && (
                 <div className="absolute inset-0 flex items-center justify-center bg-black/80 p-4">
                   <div className="text-center">
@@ -440,15 +458,27 @@ export default function LiveTV({ creds, onPlay }: Props) {
                   </div>
                 </div>
               )}
-              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-3 flex items-end justify-between">
-                <div className="flex items-center gap-2">
-                  {activeChannel.stream_icon && <div className="w-8 h-8 bg-white/10 rounded-md overflow-hidden flex-shrink-0"><img src={activeChannel.stream_icon} alt="" className="w-full h-full object-contain" onError={e => (e.currentTarget.style.display = 'none')} /></div>}
-                  <div>
-                    <div className="text-white text-sm font-semibold leading-tight">{activeChannel.name}</div>
-                    {nowPlaying && <div className="text-gray-300 text-xs">{formatTime(nowPlaying.start)} – {formatTime(nowPlaying.end)}</div>}
+              {/* Bannière info façon box TV : 4s au zapping, réapparaît au survol */}
+              <div className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent p-3 pt-8 flex items-end justify-between transition-opacity duration-500 ${showBanner ? 'opacity-100' : 'opacity-0 group-hover/player:opacity-100'}`}>
+                <div className="flex items-center gap-3 min-w-0">
+                  <ChannelLogo name={activeChannel.name} icon={activeChannel.stream_icon} className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0" />
+                  <div className="min-w-0">
+                    <div className="text-white text-sm font-semibold leading-tight truncate">{activeChannel.name}</div>
+                    {nowPlaying && (
+                      <>
+                        <div className="text-gray-300 text-xs truncate">{decodeHtml(nowPlaying.title)}</div>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-gray-400 text-[10px]">{formatTime(nowPlaying.start)}</span>
+                          <div className="w-24 h-1 bg-white/20 rounded-full overflow-hidden">
+                            <div className="h-full bg-orange-400 rounded-full" style={{ width: `${getProgress(nowPlaying.start_timestamp, nowPlaying.stop_timestamp)}%` }} />
+                          </div>
+                          <span className="text-gray-400 text-[10px]">{formatTime(nowPlaying.end)}</span>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
-                <button onClick={handleFullscreen} className="bg-black/60 hover:bg-black/80 text-white rounded-lg p-2 transition" style={{ touchAction: 'manipulation' }}>
+                <button onClick={handleFullscreen} className="bg-black/60 hover:bg-black/80 text-white rounded-lg p-2 transition flex-shrink-0" style={{ touchAction: 'manipulation' }}>
                   <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
                 </button>
               </div>

@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo, useRef } from 'react'
 import type { XtreamCredentials, XtreamCategory, XtreamMovie } from '../types/xtream'
 import { XtreamAPI, getFavorites, toggleFavorite, needsProxy, stopVideo } from '../utils/api'
+import { GridSkeleton } from './ui'
 import Hls from 'hls.js'
 
 interface VodInfo {
@@ -130,17 +131,7 @@ export default function Movies({ creds, onPlay }: Props) {
     return list
   }, [movies, selectedCat, search])
 
-  if (loading) return (
-    <div className="flex-1 flex items-center justify-center">
-      <div className="text-center">
-        <svg className="animate-spin w-8 h-8 text-violet-500 mx-auto mb-3" viewBox="0 0 24 24" fill="none">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
-        </svg>
-        <p className="text-gray-400 text-sm">Chargement des films...</p>
-      </div>
-    </div>
-  )
+  if (loading) return <div className="flex-1 overflow-hidden"><GridSkeleton count={18} /></div>
 
   // Vue détail film
   if (selected) {
@@ -458,7 +449,7 @@ export default function Movies({ creds, onPlay }: Props) {
             ) : (
               <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
                 {filtered.map(m => (
-                  <div key={m.stream_id} onClick={() => handleSelect(m)} className="group relative rounded-xl overflow-hidden bg-gray-800 aspect-[2/3] cursor-pointer hover:ring-2 hover:ring-violet-500 transition">
+                  <div key={m.stream_id} onClick={() => handleSelect(m)} className="group relative rounded-xl overflow-hidden bg-gray-800 aspect-[2/3] cursor-pointer hover:ring-2 hover:ring-violet-500 hover:scale-[1.03] hover:shadow-xl hover:shadow-violet-900/30 hover:z-10 transition-all duration-200">
                     {(m.stream_icon || m.cover) ? (
                       <img src={m.stream_icon || m.cover} alt={m.name} className="w-full h-full object-cover" onError={e => (e.currentTarget.style.display = 'none')} />
                     ) : (
