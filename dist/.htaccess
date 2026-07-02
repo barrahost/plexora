@@ -1,0 +1,5 @@
+# Forcer HTTP : la video IPTV (flux HTTP) est bloquee en mixed content sur une page HTTPS.
+# L'app doit etre servie en HTTP pur.
+RewriteEngine On
+RewriteCond %{HTTPS} on
+RewriteRule ^(.*)$ http://%{HTTP_HOST}/$1 [R=301,L]
