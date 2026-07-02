@@ -29,6 +29,7 @@ export default function LiveTV({ creds, onPlay, jump }: Props) {
   const [videoReady, setVideoReady] = useState(false)
   const [showBanner, setShowBanner] = useState(false)
   const [numBuffer, setNumBuffer] = useState('')
+  const [retryTick, setRetryTick] = useState(0)
   const videoRef = useRef<HTMLVideoElement>(null)
   const hlsRef = useRef<Hls | null>(null)
   const bannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -91,7 +92,7 @@ export default function LiveTV({ creds, onPlay, jump }: Props) {
         hls.attachMedia(video)
         hls.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(() => {}))
         hls.on(Hls.Events.ERROR, (_, data) => {
-          if (data.fatal) setPlayerError(`${data.type} / ${data.details}`)
+          if (data.fatal) setPlayerError(friendlyPlayerError(data.details))
         })
       } else {
         video.src = url
@@ -106,7 +107,7 @@ export default function LiveTV({ creds, onPlay, jump }: Props) {
       hlsRef.current?.destroy(); hlsRef.current = null
       stopVideo(video)
     }
-  }, [activeChannel, api])
+  }, [activeChannel, api, retryTick])
 
   const countByCat = useMemo(() => {
     const map: Record<string, number> = {}
@@ -354,8 +355,10 @@ export default function LiveTV({ creds, onPlay, jump }: Props) {
           </div>
         )}
         {playerError && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/80 p-4">
-            <div className="text-red-400 text-xs font-mono bg-red-900/30 px-3 py-2 rounded">{playerError}</div>
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-gray-950 p-4">
+            <svg className="w-8 h-8 text-gray-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
+            <div className="text-gray-300 text-sm text-center">{playerError}</div>
+            <button onClick={() => setRetryTick(t => t + 1)} className="text-xs px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition" style={{ touchAction: 'manipulation' }}>Réessayer</button>
           </div>
         )}
       </div>
@@ -400,7 +403,7 @@ export default function LiveTV({ creds, onPlay, jump }: Props) {
           </div>
         ))}
         {!epgLoading && epg.length === 0 && (
-          <div className="p-4 text-gray-600 text-sm">Aucune donnée EPG.</div>
+          <div className="p-4 text-gray-600 text-sm">Guide des programmes non fourni pour cette chaîne.</div>
         )}
       </div>
     </div>
@@ -495,10 +498,10 @@ export default function LiveTV({ creds, onPlay, jump }: Props) {
                 </div>
               )}
               {playerError && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black/80 p-4">
-                  <div className="text-center">
-                    <div className="text-red-400 text-xs font-mono bg-red-900/30 px-3 py-2 rounded">{playerError}</div>
-                  </div>
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-gray-950 p-4">
+                  <svg className="w-10 h-10 text-gray-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
+                  <div className="text-gray-300 text-sm text-center max-w-xs">{playerError}</div>
+                  <button onClick={() => setRetryTick(t => t + 1)} className="text-xs px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition" style={{ touchAction: 'manipulation' }}>Réessayer</button>
                 </div>
               )}
               {/* Bannière info façon box TV : 4s au zapping, réapparaît au survol */}
@@ -554,7 +557,7 @@ export default function LiveTV({ creds, onPlay, jump }: Props) {
                   <div className="flex items-center justify-between text-xs text-gray-500 mt-1.5"><span>{formatTime(item.start)}</span><span>{formatTime(item.end)}</span></div>
                 </div>
               ))}
-              {!epgLoading && epg.length === 0 && <div className="p-4 text-gray-600 text-sm">Aucune donnée EPG disponible.</div>}
+              {!epgLoading && epg.length === 0 && <div className="p-4 text-gray-600 text-sm">Guide des programmes non fourni pour cette chaîne.</div>}
             </div>
           </>
         )}
@@ -600,6 +603,19 @@ function getProgress(start: number, stop: number): number {
   const now = Math.floor(Date.now() / 1000)
   if (!start || !stop || stop <= start) return 0
   return Math.min(100, Math.max(0, ((now - start) / (stop - start)) * 100))
+}
+
+// Traduit les erreurs techniques HLS.js en message compréhensible
+function friendlyPlayerError(details: string): string {
+  if (details.includes('manifestLoad') || details.includes('manifestParsing'))
+    return 'Cette chaîne ne répond pas pour le moment.'
+  if (details.includes('levelLoad') || details.includes('fragLoad'))
+    return 'Le flux de cette chaîne est interrompu.'
+  if (details.includes('bufferStalled'))
+    return 'Connexion trop lente, le flux est en pause.'
+  if (details.includes('mediaError') || details.includes('bufferAppend'))
+    return 'Format vidéo non supporté par le navigateur.'
+  return 'Impossible de lire cette chaîne.'
 }
 
 function decodeHtml(str: string): string {
