@@ -1,7 +1,8 @@
 import { useEffect, useState, useMemo, useRef } from 'react'
 import type { XtreamCredentials, XtreamCategory, XtreamMovie } from '../types/xtream'
 import { XtreamAPI, getFavorites, toggleFavorite, needsProxy, stopVideo } from '../utils/api'
-import { GridSkeleton, CodecBadge, openInVlc } from './ui'
+import { GridSkeleton, CodecBadge, TechChips, openInVlc } from './ui'
+import type { TechInfoData } from './ui'
 import Hls from 'hls.js'
 
 interface VodInfo {
@@ -13,6 +14,7 @@ interface VodInfo {
   releasedate?: string
   description?: string
   audioCodec?: string
+  tech?: TechInfoData
 }
 
 interface Props {
@@ -80,6 +82,16 @@ export default function Movies({ creds, onPlay, jump }: Props) {
           genre: str(info.genre || movie.genre || selected.genre),
           release_date: str(info.release_date || info.releasedate || movie.release_date || selected.release_date),
           audioCodec: str((info.audio as Record<string, unknown> | undefined)?.codec_name),
+        }
+        const v = info.video as Record<string, unknown> | undefined
+        const a = info.audio as Record<string, unknown> | undefined
+        merged.tech = {
+          videoCodec: str(v?.codec_name),
+          width: Number(v?.width) || undefined,
+          height: Number(v?.height) || undefined,
+          audioCodec: str(a?.codec_name),
+          channels: Number(a?.channels) || undefined,
+          audioLang: str((a?.tags as Record<string, unknown> | undefined)?.language),
         }
         setVodInfo(merged)
       })
@@ -194,6 +206,7 @@ export default function Movies({ creds, onPlay, jump }: Props) {
             Chargement des infos...
           </div>
         )}
+        {info.tech && <TechChips info={info.tech} />}
         <CodecBadge audio={info.audioCodec} />
         <div className="flex items-center gap-2">
           <button

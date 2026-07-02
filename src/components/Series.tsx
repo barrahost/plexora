@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo, useRef } from 'react'
 import type { XtreamCredentials, XtreamCategory, XtreamSeries } from '../types/xtream'
 import { XtreamAPI, needsProxy, stopVideo } from '../utils/api'
-import { GridSkeleton, CodecBadge, openInVlc } from './ui'
+import { GridSkeleton, CodecBadge, TechChips, openInVlc } from './ui'
 import Hls from 'hls.js'
 
 interface EpisodeData {
@@ -16,8 +16,8 @@ interface EpisodeData {
     plot?: string
     releasedate?: string
     rating?: string
-    audio?: { codec_name?: string }
-    video?: { codec_name?: string }
+    audio?: { codec_name?: string; channels?: number; tags?: { language?: string } }
+    video?: { codec_name?: string; width?: number; height?: number }
   }
 }
 
@@ -511,6 +511,14 @@ export default function SeriesView({ creds, onPlay, jump }: Props) {
                   <p className="text-yellow-400 text-sm font-medium mb-2">
                     S{selectedSeason.padStart(2,'0')}·E{String(activeEp.episode_num).padStart(2,'0')} — {activeEp.title || `Épisode ${activeEp.episode_num}`}
                   </p>
+                  <TechChips info={{
+                    videoCodec: activeEp.info?.video?.codec_name,
+                    width: activeEp.info?.video?.width,
+                    height: activeEp.info?.video?.height,
+                    audioCodec: activeEp.info?.audio?.codec_name,
+                    channels: activeEp.info?.audio?.channels,
+                    audioLang: activeEp.info?.audio?.tags?.language,
+                  }} />
                   <CodecBadge audio={activeEp.info?.audio?.codec_name} />
                   <div className="flex items-center gap-2 mb-3">
                     <button

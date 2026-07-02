@@ -31,6 +31,8 @@ export default function LiveTV({ creds, onPlay, jump }: Props) {
   const [showBanner, setShowBanner] = useState(false)
   const [numBuffer, setNumBuffer] = useState('')
   const [retryTick, setRetryTick] = useState(0)
+  const [audioTracks, setAudioTracks] = useState<{ id: number; name: string }[]>([])
+  const [currentAudio, setCurrentAudio] = useState(0)
   const videoRef = useRef<HTMLVideoElement>(null)
   const hlsRef = useRef<Hls | null>(null)
   const bannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -63,6 +65,7 @@ export default function LiveTV({ creds, onPlay, jump }: Props) {
     setEpg([])
     setEpgLoading(true)
     setVideoReady(false)
+    setAudioTracks([])
     // Bannière info façon box TV : visible au zapping, disparaît après 4s
     setShowBanner(true)
     if (bannerTimer.current) clearTimeout(bannerTimer.current)
@@ -102,6 +105,13 @@ export default function LiveTV({ creds, onPlay, jump }: Props) {
         hls.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(() => {}))
         hls.on(Hls.Events.ERROR, (_, data) => {
           if (data.fatal) setPlayerError(friendlyPlayerError(data.details))
+        })
+        // Pistes audio multiples (VF/VO...) si le flux HLS les déclare
+        hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, () => {
+          if (cancelled) return
+          const tracks = hls.audioTracks.map((t, i) => ({ id: i, name: t.name || t.lang || `Piste ${i + 1}` }))
+          setAudioTracks(tracks.length > 1 ? tracks : [])
+          setCurrentAudio(hls.audioTrack)
         })
       } else {
         video.src = url
@@ -533,9 +543,25 @@ export default function LiveTV({ creds, onPlay, jump }: Props) {
                     )}
                   </div>
                 </div>
-                <button onClick={handleFullscreen} className="bg-black/60 hover:bg-black/80 text-white rounded-lg p-2 transition flex-shrink-0" style={{ touchAction: 'manipulation' }}>
-                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
-                </button>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  {audioTracks.length > 0 && (
+                    <select
+                      value={currentAudio}
+                      onChange={e => {
+                        const i = Number(e.target.value)
+                        setCurrentAudio(i)
+                        if (hlsRef.current) hlsRef.current.audioTrack = i
+                      }}
+                      className="bg-black/60 text-white text-xs rounded-lg px-2 py-2 border border-gray-700 focus:outline-none"
+                      title="Piste audio"
+                    >
+                      {audioTracks.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                    </select>
+                  )}
+                  <button onClick={handleFullscreen} className="bg-black/60 hover:bg-black/80 text-white rounded-lg p-2 transition" style={{ touchAction: 'manipulation' }}>
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
+                  </button>
+                </div>
               </div>
             </div>
             <div className="h-1/2 overflow-y-auto">

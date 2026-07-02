@@ -84,6 +84,46 @@ export function audioCodecWarning(codecName?: string): string | null {
   return null
 }
 
+// Chips techniques : codecs vidéo/audio, résolution, canaux, langue
+export interface TechInfoData {
+  videoCodec?: string
+  width?: number
+  height?: number
+  audioCodec?: string
+  channels?: number
+  audioLang?: string
+}
+
+function resLabel(w?: number, h?: number): string {
+  if (!h) return ''
+  if (h >= 2000 || (w ?? 0) >= 3800) return '4K'
+  if (h >= 1000) return '1080p'
+  if (h >= 700) return '720p'
+  return `${h}p`
+}
+
+function channelsLabel(ch?: number): string {
+  if (!ch) return ''
+  if (ch >= 8) return '7.1'
+  if (ch >= 6) return '5.1'
+  if (ch === 2) return 'Stéréo'
+  return `${ch}ch`
+}
+
+export function TechChips({ info }: { info: TechInfoData }) {
+  const chips: string[] = []
+  if (info.videoCodec) chips.push([info.videoCodec.toUpperCase(), resLabel(info.width, info.height)].filter(Boolean).join(' '))
+  if (info.audioCodec) chips.push([info.audioCodec.toUpperCase(), channelsLabel(info.channels), info.audioLang?.toUpperCase()].filter(Boolean).join(' '))
+  if (chips.length === 0) return null
+  return (
+    <div className="flex flex-wrap gap-1.5 my-2">
+      {chips.map((c, i) => (
+        <span key={i} className="text-[10px] font-mono text-gray-400 bg-gray-800 border border-gray-700 rounded px-2 py-0.5">{c}</span>
+      ))}
+    </div>
+  )
+}
+
 export function CodecBadge({ audio }: { audio?: string }) {
   const warning = audioCodecWarning(audio)
   if (!warning) return null
