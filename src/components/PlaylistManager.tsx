@@ -4,7 +4,7 @@ import {
   getPlaylists, addPlaylist, updatePlaylist, deletePlaylist,
   getActivePlaylistId, setActivePlaylistId,
 } from '../utils/api'
-import { XtreamAPI } from '../utils/api'
+import { XtreamAPI, normalizeServerUrl } from '../utils/api'
 
 interface Props {
   onSwitch: (creds: XtreamCredentials, playlistId: string) => void
@@ -48,7 +48,7 @@ export default function PlaylistManager({ onSwitch }: Props) {
     try {
       const api = new XtreamAPI({ url: form.url, username: form.username, password: form.password })
       const info = await api.getAccountInfo()
-      setTestResult(info.user_info?.auth === 1 ? 'ok' : 'error')
+      setTestResult(Number(info.user_info?.auth) === 1 ? 'ok' : 'error')
     } catch {
       setTestResult('error')
     } finally {
@@ -58,16 +58,19 @@ export default function PlaylistManager({ onSwitch }: Props) {
 
   function handleSave() {
     if (!form.url || !form.username || !form.password) return
-    const name = form.name.trim() || form.url.replace(/https?:\/\//, '').split('/')[0]
+    const url = normalizeServerUrl(form.url)
+    const username = form.username.trim()
+    const password = form.password.trim()
+    const name = form.name.trim() || url.replace(/https?:\/\//, '').split('/')[0]
     if (editing === 'new') {
-      const newPl = addPlaylist({ name, url: form.url, username: form.username, password: form.password })
+      const newPl = addPlaylist({ name, url, username, password })
       refresh()
       setEditing(newPl.id)
     } else if (editing) {
-      updatePlaylist(editing, { name, url: form.url, username: form.username, password: form.password })
+      updatePlaylist(editing, { name, url, username, password })
       refresh()
     }
-    setForm(f => ({ ...f, name }))
+    setForm(f => ({ ...f, name, url }))
   }
 
   function handleDelete(id: string) {

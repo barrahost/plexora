@@ -27,11 +27,19 @@ export function stopVideo(video: HTMLVideoElement | null): void {
   } catch { /* ignore */ }
 }
 
+// Normalise l'URL serveur : trim, ajoute http:// si aucun schéma, retire le / final.
+// Sans ça, une URL tapée sans http:// devient une requête relative qui échoue toujours.
+export function normalizeServerUrl(url: string): string {
+  let u = url.trim().replace(/\/+$/, '')
+  if (!/^https?:\/\//i.test(u)) u = `http://${u}`
+  return u
+}
+
 export class XtreamAPI {
   private creds: XtreamCredentials
 
   constructor(creds: XtreamCredentials) {
-    this.creds = creds
+    this.creds = { ...creds, url: normalizeServerUrl(creds.url), username: creds.username.trim(), password: creds.password.trim() }
   }
 
   private get base() {

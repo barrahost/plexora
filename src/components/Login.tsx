@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { XtreamCredentials } from '../types/xtream'
-import { XtreamAPI, saveCredentials } from '../utils/api'
+import { XtreamAPI, saveCredentials, normalizeServerUrl } from '../utils/api'
 
 interface Props {
   onLogin: (creds: XtreamCredentials) => void
@@ -17,11 +17,11 @@ export default function Login({ onLogin }: Props) {
     e.preventDefault()
     setError('')
     setLoading(true)
-    const creds: XtreamCredentials = { url, username, password }
+    const creds: XtreamCredentials = { url: normalizeServerUrl(url), username: username.trim(), password: password.trim() }
     try {
       const api = new XtreamAPI(creds)
       const info = await api.getAccountInfo()
-      if (!info.user_info || info.user_info.auth === 0) {
+      if (!info.user_info || Number(info.user_info.auth) !== 1) {
         setError('Identifiants incorrects.')
         return
       }
