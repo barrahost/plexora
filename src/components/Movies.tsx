@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo, useRef } from 'react'
 import type { XtreamCredentials, XtreamCategory, XtreamMovie } from '../types/xtream'
 import { XtreamAPI, getFavorites, toggleFavorite, needsProxy, stopVideo } from '../utils/api'
-import { GridSkeleton, CodecBadge, TechChips, openInVlc } from './ui'
+import { GridSkeleton, CodecBadge, TechChips, openInVlc, LoadMore, PAGE_SIZE } from './ui'
 import type { TechInfoData } from './ui'
 import Hls from 'hls.js'
 
@@ -38,6 +38,7 @@ export default function Movies({ creds, onPlay, jump }: Props) {
   const [playing, setPlaying] = useState(false)
   const [favorites, setFavorites] = useState<number[]>(getFavorites())
   const [vlcMsg, setVlcMsg] = useState<string | null>(null)
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
   const videoRef = useRef<HTMLVideoElement>(null)
   const hlsRef = useRef<Hls | null>(null)
 
@@ -155,6 +156,12 @@ export default function Movies({ creds, onPlay, jump }: Props) {
     }
     return list
   }, [movies, selectedCat, search])
+
+  // Rendu progressif : on repart à la première tranche quand le filtre change
+  useEffect(() => { setVisibleCount(PAGE_SIZE) }, [selectedCat, search])
+  const visible = filtered.slice(0, visibleCount)
+  const hasMore = visibleCount < filtered.length
+  const loadMore = () => setVisibleCount(c => c + PAGE_SIZE)
 
   if (loading) return <div className="flex-1 overflow-hidden"><GridSkeleton count={18} /></div>
 
@@ -417,8 +424,8 @@ export default function Movies({ creds, onPlay, jump }: Props) {
         {filtered.length === 0 ? (
           <div className="flex items-center justify-center h-40 text-gray-500 text-sm">Aucun film trouvé</div>
         ) : (
-          <div className="grid grid-cols-2 gap-2">
-            {filtered.map(m => (
+          <><div className="grid grid-cols-2 gap-2">
+            {visible.map(m => (
               <div
                 key={m.stream_id}
                 onClick={() => handleSelect(m)}
@@ -444,6 +451,7 @@ export default function Movies({ creds, onPlay, jump }: Props) {
               </div>
             ))}
           </div>
+          <LoadMore hasMore={hasMore} onMore={loadMore} /></>
         )}
       </div>
     </div>
@@ -488,8 +496,8 @@ export default function Movies({ creds, onPlay, jump }: Props) {
             {filtered.length === 0 ? (
               <div className="flex items-center justify-center h-40 text-gray-500 text-sm">Aucun film trouvé</div>
             ) : (
-              <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
-                {filtered.map(m => (
+              <><div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+                {visible.map(m => (
                   <div key={m.stream_id} onClick={() => handleSelect(m)} className="group relative rounded-xl overflow-hidden bg-gray-800 aspect-[2/3] cursor-pointer hover:ring-2 hover:ring-violet-500 hover:scale-[1.03] hover:shadow-xl hover:shadow-violet-900/30 hover:z-10 transition-all duration-200">
                     {(m.stream_icon || m.cover) ? (
                       <img src={m.stream_icon || m.cover} alt={m.name} className="w-full h-full object-cover" onError={e => (e.currentTarget.style.display = 'none')} />
@@ -510,6 +518,7 @@ export default function Movies({ creds, onPlay, jump }: Props) {
                   </div>
                 ))}
               </div>
+              <LoadMore hasMore={hasMore} onMore={loadMore} /></>
             )}
           </div>
         </div>

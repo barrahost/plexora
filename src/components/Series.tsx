@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo, useRef } from 'react'
 import type { XtreamCredentials, XtreamCategory, XtreamSeries } from '../types/xtream'
 import { XtreamAPI, needsProxy, stopVideo } from '../utils/api'
-import { GridSkeleton, CodecBadge, TechChips, openInVlc } from './ui'
+import { GridSkeleton, CodecBadge, TechChips, openInVlc, LoadMore, PAGE_SIZE } from './ui'
 import Hls from 'hls.js'
 
 interface EpisodeData {
@@ -57,6 +57,7 @@ export default function SeriesView({ creds, onPlay, jump }: Props) {
   const [selectedSeason, setSelectedSeason] = useState<string>('1')
   const [infoError, setInfoError] = useState(false)
   const [vlcMsg, setVlcMsg] = useState<string | null>(null)
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
   const [activeEp, setActiveEp] = useState<EpisodeData | null>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
   const hlsRef = useRef<Hls | null>(null)
@@ -152,6 +153,12 @@ export default function SeriesView({ creds, onPlay, jump }: Props) {
     return list
   }, [series, selectedCat, search])
 
+  // Rendu progressif (catalogues de plusieurs milliers d'entrées)
+  useEffect(() => { setVisibleCount(PAGE_SIZE) }, [selectedCat, search])
+  const visibleSeries = filtered.slice(0, visibleCount)
+  const hasMore = visibleCount < filtered.length
+  const loadMore = () => setVisibleCount(c => c + PAGE_SIZE)
+
   const cover = (s: XtreamSeries) => (typeof s.cover === 'string' ? s.cover : '')
 
   const episodes = seriesInfo?.episodes || {}
@@ -168,8 +175,8 @@ export default function SeriesView({ creds, onPlay, jump }: Props) {
 
   // ── Grille commune (utilisée mobile + desktop) ──
   const seriesGrid = (cols: string) => (
-    <div className={`grid ${cols} gap-2 sm:gap-3`}>
-      {filtered.map(s => (
+    <><div className={`grid ${cols} gap-2 sm:gap-3`}>
+      {visibleSeries.map(s => (
         <div
           key={s.series_id}
           onClick={() => handleSelectSeries(s)}
@@ -197,6 +204,7 @@ export default function SeriesView({ creds, onPlay, jump }: Props) {
         </div>
       ))}
     </div>
+    <LoadMore hasMore={hasMore} onMore={loadMore} /></>
   )
 
   // ── MOBILE : écran catégories ──

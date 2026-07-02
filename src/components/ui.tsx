@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
 // ── Logo de chaîne avec fallback élégant ────────────────────────────────────
 // Si pas de logo (ou logo cassé) : initiales sur un dégradé dérivé du nom.
@@ -51,6 +51,27 @@ export function ChannelLogo({ name, icon, className = '', textClass = 'text-xs' 
       <img src={icon} alt="" className="w-full h-full object-contain p-0.5" onError={() => setBroken(true)} loading="lazy" />
     </div>
   )
+}
+
+// ── Rendu progressif ─────────────────────────────────────────────────────────
+// Les catalogues font 15 000+ entrées : tout rendre fige l'onglet plusieurs
+// secondes. On affiche par tranches, la suite se charge au scroll.
+
+export const PAGE_SIZE = 60
+
+export function LoadMore({ hasMore, onMore }: { hasMore: boolean; onMore: () => void }) {
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!hasMore || !ref.current) return
+    const obs = new IntersectionObserver(
+      entries => entries.forEach(e => { if (e.isIntersecting) onMore() }),
+      { rootMargin: '800px' }
+    )
+    obs.observe(ref.current)
+    return () => obs.disconnect()
+  }, [hasMore, onMore])
+  if (!hasMore) return null
+  return <div ref={ref} className="h-10 flex items-center justify-center text-gray-600 text-xs">Chargement...</div>
 }
 
 // ── Lecture externe (VLC) ────────────────────────────────────────────────────

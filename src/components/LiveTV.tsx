@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo, useRef } from 'react'
 import type { XtreamCredentials, XtreamCategory, XtreamChannel, EPGItem } from '../types/xtream'
 import { XtreamAPI, getFavorites, toggleFavorite, needsProxy, stopVideo } from '../utils/api'
-import { ChannelLogo, LiveTVSkeleton } from './ui'
+import { ChannelLogo, LiveTVSkeleton, LoadMore, PAGE_SIZE } from './ui'
 import { getXmltvEpg } from '../utils/epg'
 import Hls from 'hls.js'
 
@@ -33,6 +33,7 @@ export default function LiveTV({ creds, onPlay, jump }: Props) {
   const [retryTick, setRetryTick] = useState(0)
   const [audioTracks, setAudioTracks] = useState<{ id: number; name: string }[]>([])
   const [currentAudio, setCurrentAudio] = useState(0)
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
   const videoRef = useRef<HTMLVideoElement>(null)
   const hlsRef = useRef<Hls | null>(null)
   const bannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -141,6 +142,12 @@ export default function LiveTV({ creds, onPlay, jump }: Props) {
     if (search.trim()) { const q = search.toLowerCase(); list = list.filter(c => c.name.toLowerCase().includes(q)) }
     return list
   }, [channels, selectedCat, search, favorites])
+
+  // Rendu progressif (4000+ chaînes) — le zapping numérique garde la liste complète
+  useEffect(() => { setVisibleCount(PAGE_SIZE) }, [selectedCat, search])
+  const visibleChannels = filtered.slice(0, visibleCount)
+  const hasMore = visibleCount < filtered.length
+  const loadMore = () => setVisibleCount(c => c + PAGE_SIZE)
 
   // Zapping numérique : taper le numéro de chaîne (1.5s de délai ou Entrée pour valider)
   const filteredRef = useRef(filtered)
@@ -300,7 +307,7 @@ export default function LiveTV({ creds, onPlay, jump }: Props) {
       <div className="flex-1 overflow-y-auto overscroll-contain">
         {filtered.length === 0 ? (
           <div className="flex items-center justify-center h-32 text-gray-600 text-sm">Aucune chaîne</div>
-        ) : filtered.map((ch, idx) => {
+        ) : visibleChannels.map((ch, idx) => {
           const active = activeChannel?.stream_id === ch.stream_id
           const isFav = favorites.includes(ch.stream_id)
           return (
@@ -327,6 +334,7 @@ export default function LiveTV({ creds, onPlay, jump }: Props) {
             </div>
           )
         })}
+        <LoadMore hasMore={hasMore} onMore={loadMore} />
       </div>
     </div>
   )
@@ -474,7 +482,7 @@ export default function LiveTV({ creds, onPlay, jump }: Props) {
         <div className="flex-1 overflow-y-auto">
           {filtered.length === 0 ? (
             <div className="flex items-center justify-center h-32 text-gray-600 text-sm">Aucune chaîne</div>
-          ) : filtered.map((ch, idx) => {
+          ) : visibleChannels.map((ch, idx) => {
             const active = activeChannel?.stream_id === ch.stream_id
             const isFav = favorites.includes(ch.stream_id)
             return (
@@ -490,6 +498,7 @@ export default function LiveTV({ creds, onPlay, jump }: Props) {
               </div>
             )
           })}
+          <LoadMore hasMore={hasMore} onMore={loadMore} />
         </div>
       </div>
 
