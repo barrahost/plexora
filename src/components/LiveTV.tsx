@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo, useRef } from 'react'
 import type { XtreamCredentials, XtreamCategory, XtreamChannel, EPGItem } from '../types/xtream'
 import { XtreamAPI, getFavorites, toggleFavorite, needsProxy, stopVideo } from '../utils/api'
 import { ChannelLogo, LiveTVSkeleton } from './ui'
+import { getXmltvEpg } from '../utils/epg'
 import Hls from 'hls.js'
 
 interface Props {
@@ -73,9 +74,17 @@ export default function LiveTV({ creds, onPlay, jump }: Props) {
 
     // 1) Charger l'EPG AVANT d'ouvrir le flux : avec max_connections=1,
     // le serveur refuse souvent les requêtes API pendant qu'un flux est ouvert.
+    // Si get_short_epg est vide (fréquent sur ce serveur), fallback sur le
+    // guide XMLTV complet (téléchargé une fois par session).
     const epgPromise = api.getEPG(activeChannel.stream_id)
-      .then(data => { if (!cancelled) setEpg(Array.isArray(data.epg_listings) ? data.epg_listings : []) })
-      .catch(() => {})
+      .then(data => (Array.isArray(data.epg_listings) ? data.epg_listings : []))
+      .catch(() => [] as EPGItem[])
+      .then(async list => {
+        if (list.length === 0) {
+          try { list = await getXmltvEpg(creds, activeChannel!.epg_channel_id) } catch { /* pas de guide */ }
+        }
+        if (!cancelled) setEpg(list)
+      })
       .finally(() => { if (!cancelled) setEpgLoading(false) })
 
     // 2) Puis démarrer la lecture (sans attendre plus de 5s si l'EPG traîne)
@@ -621,8 +630,16 @@ function friendlyPlayerError(details: string): string {
 function decodeHtml(str: string): string {
   if (!str) return ''
   try {
-    // Les titres/descriptions Xtream Codes sont souvent en base64
-    const decoded = /^[A-Za-z0-9+/]+=*$/.test(str.trim()) ? atob(str.trim()) : str
+    let decoded = str
+    // Les titres get_short_epg sont en base64 ; les titres XMLTV sont en clair.
+    // On ne décode que si le résultat est du texte lisible, sinon un mot
+    // ordinaire ("Journal") serait transformé en binaire.
+    const trimmed = str.trim()
+    if (trimmed.length >= 8 && trimmed.length % 4 === 0 && /^[A-Za-z0-9+/]+=*$/.test(trimmed)) {
+      const candidate = atob(trimmed)
+      const printable = candidate.split('').filter(c => c >= ' ' || c === '\n').length / candidate.length
+      if (printable > 0.9) decoded = candidate
+    }
     const t = document.createElement('textarea')
     t.innerHTML = decoded
     return t.value
