@@ -81,6 +81,13 @@ export default function Player({ streamUrl, title, cover, channel, creds, onClos
     }).catch(() => {})
   }, [channel, creds])
 
+  // Touche Retour de la télécommande / Échap clavier : fermer le lecteur
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
   function handleMouseMove() {
     setShowControls(true)
     if (timerRef.current) clearTimeout(timerRef.current)

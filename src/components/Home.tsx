@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { listResume } from '../utils/resume'
+import { tvProps } from './ui'
 
 interface Props {
   onResume: (url: string, title: string, cover?: string) => void
@@ -36,7 +37,7 @@ export default function Home({ onResume }: Props) {
               return (
                 <div
                   key={item.key}
-                  onClick={() => onResume(item.key, item.meta.title, item.meta.poster)}
+                  {...tvProps(() => onResume(item.key, item.meta.title, item.meta.poster))}
                   className="group relative rounded-xl overflow-hidden bg-gray-800 aspect-[2/3] cursor-pointer hover:ring-2 hover:ring-violet-500 hover:scale-[1.03] hover:shadow-xl hover:shadow-violet-900/30 hover:z-10 transition-all duration-200"
                   style={{ touchAction: 'manipulation' }}
                 >

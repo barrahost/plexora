@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo, useRef } from 'react'
 import type { XtreamCredentials, XtreamCategory, XtreamSeries } from '../types/xtream'
 import { XtreamAPI, needsProxy, stopVideo } from '../utils/api'
-import { GridSkeleton, CodecBadge, TechChips, openInVlc, LoadMore, PAGE_SIZE } from './ui'
+import { GridSkeleton, CodecBadge, TechChips, openInVlc, LoadMore, PAGE_SIZE, tvProps } from './ui'
 import { attachResume } from '../utils/resume'
 
 import Hls from 'hls.js'
@@ -183,7 +183,7 @@ export default function SeriesView({ creds, onPlay, jump }: Props) {
       {visibleSeries.map(s => (
         <div
           key={s.series_id}
-          onClick={() => handleSelectSeries(s)}
+          {...tvProps(() => handleSelectSeries(s))}
           className="group relative rounded-xl overflow-hidden bg-gray-800 aspect-[2/3] cursor-pointer hover:ring-2 hover:ring-violet-500 hover:scale-[1.03] hover:shadow-xl hover:shadow-violet-900/30 hover:z-10 transition-all duration-200 active:scale-95"
           style={{ touchAction: 'manipulation' }}
         >
@@ -469,7 +469,7 @@ export default function SeriesView({ creds, onPlay, jump }: Props) {
               {currentEpisodes.map(ep => (
                 <div
                   key={ep.id}
-                  onClick={() => setActiveEp(ep)}
+                  {...tvProps(() => setActiveEp(ep))}
                   className={`flex items-center gap-3 px-3 py-2.5 border-b border-gray-800/50 cursor-pointer transition ${activeEp?.id === ep.id ? 'bg-yellow-400/10 border-l-2 border-l-yellow-400' : 'hover:bg-gray-800/60'}`}
                 >
                   <div className={`flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold ${activeEp?.id === ep.id ? 'bg-yellow-400 text-gray-900' : 'bg-gray-800 text-gray-400'}`}>

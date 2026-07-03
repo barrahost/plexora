@@ -1,5 +1,19 @@
 import { useState, useEffect, useRef } from 'react'
 
+// ── Rend une <div> cliquable focusable et activable au clavier/télécommande ──
+// Sans tabIndex, un élément non natif (div, span) est invisible pour Tab et
+// pour le D-pad TV. `role="button"` + gestion Entrée/Espace complète l'accès.
+export function tvProps(onClick: (e: React.SyntheticEvent) => void) {
+  return {
+    tabIndex: 0,
+    role: 'button' as const,
+    onClick,
+    onKeyDown: (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(e) }
+    },
+  }
+}
+
 // ── Logo de chaîne avec fallback élégant ────────────────────────────────────
 // Si pas de logo (ou logo cassé) : initiales sur un dégradé dérivé du nom.
 

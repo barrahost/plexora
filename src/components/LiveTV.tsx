@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo, useRef } from 'react'
 import type { XtreamCredentials, XtreamCategory, XtreamChannel, EPGItem } from '../types/xtream'
 import { XtreamAPI, getFavorites, toggleFavorite, needsProxy, stopVideo, fixMojibake } from '../utils/api'
-import { ChannelLogo, LiveTVSkeleton, LoadMore, PAGE_SIZE } from './ui'
+import { ChannelLogo, LiveTVSkeleton, LoadMore, PAGE_SIZE, tvProps } from './ui'
 import { getXmltvEpg } from '../utils/epg'
 import Hls from 'hls.js'
 import mpegts from 'mpegts.js'
@@ -549,7 +549,7 @@ export default function LiveTV({ creds, onPlay, jump }: Props) {
                 const active = activeChannel?.stream_id === ch.stream_id
                 const isFav = favorites.includes(ch.stream_id)
                 return (
-                  <div key={ch.stream_id} onClick={() => setActiveChannel(ch)} className={`flex items-center gap-3 px-3 py-2.5 border-b border-gray-800/40 cursor-pointer transition-colors group ${active ? 'bg-orange-500/20 border-l-4 border-l-orange-400' : 'hover:bg-gray-800/60'}`} style={{ touchAction: 'manipulation' }}>
+                  <div key={ch.stream_id} {...tvProps(() => setActiveChannel(ch))} className={`flex items-center gap-3 px-3 py-2.5 border-b border-gray-800/40 cursor-pointer transition-colors group ${active ? 'bg-orange-500/20 border-l-4 border-l-orange-400' : 'hover:bg-gray-800/60'}`} style={{ touchAction: 'manipulation' }}>
                     <ChannelLogo name={ch.name} icon={ch.stream_icon} className="w-9 h-9 flex-shrink-0 rounded-md overflow-hidden" />
                     <div className="flex-1 min-w-0">
                       <div className={`text-sm font-medium truncate ${active ? 'text-orange-400' : 'text-gray-200'}`}>{ch.name}</div>
@@ -752,7 +752,7 @@ function ChannelGrid({ channels, activeChannel, favorites, onSelect, onFavorite,
           return (
             <div
               key={ch.stream_id}
-              onClick={() => onSelect(ch)}
+              {...tvProps(() => onSelect(ch))}
               className={`group relative rounded-xl overflow-hidden cursor-pointer transition ${active ? 'ring-2 ring-orange-400' : 'hover:ring-2 hover:ring-violet-500'}`}
               style={{ touchAction: 'manipulation' }}
             >
@@ -797,7 +797,7 @@ function EPGTimeline({ items, nowSec, canArchive, onCatchup }: {
         return (
           <div
             key={i}
-            onClick={() => clickable && onCatchup(item)}
+            {...(clickable ? tvProps(() => onCatchup(item)) : { onClick: undefined })}
             className={`flex-shrink-0 w-36 rounded-lg p-2.5 border transition ${
               isNow ? 'bg-orange-400/15 border-orange-400/50'
               : clickable ? 'bg-gray-800/80 border-gray-700 hover:border-violet-500 cursor-pointer'

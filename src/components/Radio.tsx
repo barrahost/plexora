@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { XtreamCredentials, XtreamCategory, XtreamChannel } from '../types/xtream'
 import { XtreamAPI, needsProxy, stopVideo } from '../utils/api'
-import { ChannelLogo, LoadMore, PAGE_SIZE } from './ui'
+import { ChannelLogo, LoadMore, PAGE_SIZE, tvProps } from './ui'
 import Hls from 'hls.js'
 
 interface Props {
@@ -116,7 +116,7 @@ export default function Radio({ creds }: Props) {
             return (
               <div
                 key={s.stream_id}
-                onClick={() => setActive(s)}
+                {...tvProps(() => setActive(s))}
                 className={`flex items-center gap-3 px-3 py-2.5 border-b border-gray-800/40 cursor-pointer transition-colors ${isActive ? 'bg-orange-500/20 border-l-4 border-l-orange-400' : 'hover:bg-gray-800/60'}`}
                 style={{ touchAction: 'manipulation' }}
               >

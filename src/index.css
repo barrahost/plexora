@@ -27,3 +27,26 @@ html, body, #root {
 ::-webkit-scrollbar-thumb:hover {
   background: #4b5563;
 }
+
+/* ── Mode TV : échelle "10 pieds" ──────────────────────────────────────────
+   Les utilitaires Tailwind (texte, espacements) sont en rem : augmenter la
+   taille de police racine agrandit proportionnellement toute l'UI, sans
+   toucher au code des composants. */
+html.tv-mode {
+  font-size: 19px;
+}
+
+/* Anneau de focus large et lumineux, visible a distance, uniquement pour
+   la navigation clavier/telecommande (:focus-visible ignore les clics souris) */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+[tabindex]:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.95), 0 0 28px 6px rgba(139, 92, 246, 0.55);
+  transform: scale(1.035);
+  position: relative;
+  z-index: 30;
+  transition: transform 120ms ease, box-shadow 120ms ease;
+}

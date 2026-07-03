@@ -11,6 +11,7 @@ import Player from './components/Player'
 import PlaylistManager from './components/PlaylistManager'
 import GlobalSearch from './components/GlobalSearch'
 import { prefetchXmltv } from './utils/epg'
+import { isTV, enableTVNavigation } from './utils/tvNav'
 
 interface PlayInfo {
   url: string
@@ -87,6 +88,11 @@ export default function App() {
     // Précharger le guide XMLTV en arrière-plan → EPG instantané partout
     prefetchXmltv(creds)
   }, [creds])
+
+  // Android TV / Fire TV / téléviseurs connectés : navigation D-pad + échelle 10 pieds
+  useEffect(() => {
+    if (isTV()) enableTVNavigation()
+  }, [])
 
   // Fermeture d'onglet / navigation : couper tous les flux pour libérer
   // la connexion IPTV (max_connections=1) immédiatement côté serveur

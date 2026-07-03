@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo, useRef } from 'react'
 import type { XtreamCredentials, XtreamCategory, XtreamMovie } from '../types/xtream'
 import { XtreamAPI, getFavorites, toggleFavorite, needsProxy, stopVideo } from '../utils/api'
-import { GridSkeleton, CodecBadge, TechChips, openInVlc, LoadMore, PAGE_SIZE } from './ui'
+import { GridSkeleton, CodecBadge, TechChips, openInVlc, LoadMore, PAGE_SIZE, tvProps } from './ui'
 import { attachResume } from '../utils/resume'
 import type { TechInfoData } from './ui'
 import Hls from 'hls.js'
@@ -331,7 +331,7 @@ export default function Movies({ creds, onPlay, jump }: Props) {
                     </button>
                   </>
                 ) : (
-                  <div className="w-full h-full flex items-center justify-center cursor-pointer" onClick={() => setPlaying(true)}>
+                  <div className="w-full h-full flex items-center justify-center cursor-pointer" {...tvProps(() => setPlaying(true))}>
                     {posterUrl && <img src={posterUrl} alt="" className="w-full h-full object-cover opacity-25 absolute inset-0" />}
                     <div className="relative z-10 w-16 h-16 rounded-full bg-white/10 hover:bg-white/20 backdrop-blur border border-white/20 flex items-center justify-center transition">
                       <svg className="w-8 h-8 text-white ml-1" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
@@ -500,7 +500,7 @@ export default function Movies({ creds, onPlay, jump }: Props) {
             ) : (
               <><div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
                 {visible.map(m => (
-                  <div key={m.stream_id} onClick={() => handleSelect(m)} className="group relative rounded-xl overflow-hidden bg-gray-800 aspect-[2/3] cursor-pointer hover:ring-2 hover:ring-violet-500 hover:scale-[1.03] hover:shadow-xl hover:shadow-violet-900/30 hover:z-10 transition-all duration-200">
+                  <div key={m.stream_id} {...tvProps(() => handleSelect(m))} className="group relative rounded-xl overflow-hidden bg-gray-800 aspect-[2/3] cursor-pointer hover:ring-2 hover:ring-violet-500 hover:scale-[1.03] hover:shadow-xl hover:shadow-violet-900/30 hover:z-10 transition-all duration-200">
                     {(m.stream_icon || m.cover) ? (
                       <img src={m.stream_icon || m.cover} alt={m.name} className="w-full h-full object-cover" onError={e => (e.currentTarget.style.display = 'none')} />
                     ) : (
