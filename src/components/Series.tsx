@@ -3,6 +3,7 @@ import type { XtreamCredentials, XtreamCategory, XtreamSeries } from '../types/x
 import { XtreamAPI, needsProxy, stopVideo } from '../utils/api'
 import { GridSkeleton, CodecBadge, TechChips, openInVlc, LoadMore, PAGE_SIZE } from './ui'
 import { attachResume } from '../utils/resume'
+
 import Hls from 'hls.js'
 
 interface EpisodeData {
@@ -112,7 +113,8 @@ export default function SeriesView({ creds, onPlay, jump }: Props) {
     const direct = api.getSeriesStreamUrl(Number(activeEp.id), activeEp.container_extension || 'mp4')
     const url = needsProxy() ? `/proxy?target=${encodeURIComponent(direct)}` : direct
     hlsRef.current?.destroy()
-    const detachResume = attachResume(video, direct)
+    const epTitle = `${selected.name} · S${selectedSeason}E${activeEp.episode_num}${activeEp.title ? ' - ' + activeEp.title : ''}`
+    const detachResume = attachResume(video, direct, { title: epTitle, poster: cover(selected), kind: 'episode' })
     video.src = url
     video.load()
     video.play().catch(() => {})

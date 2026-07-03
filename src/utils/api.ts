@@ -27,6 +27,30 @@ export function stopVideo(video: HTMLVideoElement | null): void {
   } catch { /* ignore */ }
 }
 
+// Corrige le double encodage UTF-8 (bug côté serveur, pas côté navigateur) :
+// certains champs texte du panel Xtream contiennent des octets UTF-8 valides
+// qui ont été réinterprétés en Latin-1 puis ré-encodés en UTF-8, produisant
+// des séquences "Ã©", "Ã¡"... au lieu des accents. Détectable et réparable :
+// on ré-encode ces caractères en octets Latin-1 puis on les redécode en UTF-8.
+export function fixMojibake(s: string): string {
+  if (!/[ÃÂ][\x80-\xBF]/.test(s)) return s
+  try {
+    const bytes = Uint8Array.from(s, c => c.charCodeAt(0) & 0xFF)
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+  } catch { return s }
+}
+
+function fixMojibakeDeep<T>(value: T): T {
+  if (typeof value === 'string') return fixMojibake(value) as unknown as T
+  if (Array.isArray(value)) return value.map(fixMojibakeDeep) as unknown as T
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(value)) out[k] = fixMojibakeDeep(v)
+    return out as T
+  }
+  return value
+}
+
 // Normalise l'URL serveur : trim, ajoute http:// si aucun schéma, retire le / final.
 // Sans ça, une URL tapée sans http:// devient une requête relative qui échoue toujours.
 export function normalizeServerUrl(url: string): string {
@@ -63,7 +87,7 @@ export class XtreamAPI {
         const res = await fetch(url, { signal: ctrl.signal })
         clearTimeout(timer)
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        return await res.json()
+        return fixMojibakeDeep(await res.json())
       } catch (e) {
         lastErr = e
       }
@@ -110,8 +134,8 @@ export class XtreamAPI {
     return this.fetch(`action=get_vod_info&vod_id=${vodId}`)
   }
 
-  async getEPG(streamId: number): Promise<{ epg_listings: EPGItem[] }> {
-    return this.fetch<{ epg_listings: EPGItem[] }>(`action=get_short_epg&stream_id=${streamId}&limit=5`)
+  async getEPG(streamId: number, limit = 5): Promise<{ epg_listings: EPGItem[] }> {
+    return this.fetch<{ epg_listings: EPGItem[] }>(`action=get_short_epg&stream_id=${streamId}&limit=${limit}`)
   }
 
   private streamUrl(path: string): string {
@@ -121,6 +145,17 @@ export class XtreamAPI {
 
   getLiveStreamUrl(streamId: number, ext = 'ts'): string {
     return this.streamUrl(`live/${this.creds.username}/${this.creds.password}/${streamId}.${ext}`)
+  }
+
+  // Catch-up / timeshift Xtream : format standard {server}/timeshift/{user}/{pass}/{duration_min}/{YYYY-MM-DD:HH-MM}/{id}.ts
+  // Composants en UTC (déterministe, indépendant du fuseau du navigateur) — les
+  // timestamps EPG sont déjà normalisés en UTC lors du parsing XMLTV/get_short_epg.
+  getCatchupUrl(streamId: number, startTimestampSec: number, durationMinutes: number): string {
+    const d = new Date(startTimestampSec * 1000)
+    const pad = (n: number) => String(n).padStart(2, '0')
+    const start = `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}:${pad(d.getUTCHours())}-${pad(d.getUTCMinutes())}`
+    const base = this.creds.url.replace(/\/$/, '')
+    return `${base}/timeshift/${this.creds.username}/${this.creds.password}/${Math.max(1, Math.ceil(durationMinutes))}/${start}/${streamId}.ts`
   }
 
   getVodStreamUrl(streamId: number, ext = 'mp4'): string {

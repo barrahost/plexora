@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import Hls from 'hls.js'
+import mpegts from 'mpegts.js'
 import type { XtreamChannel, XtreamMovie, EPGItem } from '../types/xtream'
 import { XtreamAPI, needsProxy, stopVideo } from '../utils/api'
 import { attachResume } from '../utils/resume'
@@ -18,7 +19,9 @@ interface Props {
 export default function Player({ streamUrl, title, cover, channel, creds, onClose }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const hlsRef = useRef<Hls | null>(null)
+  const mpegtsRef = useRef<mpegts.Player | null>(null)
   const [epg, setEpg] = useState<EPGItem[]>([])
+  const [error, setError] = useState<string | null>(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [showControls, setShowControls] = useState(true)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -26,8 +29,11 @@ export default function Player({ streamUrl, title, cover, channel, creds, onClos
   useEffect(() => {
     const video = videoRef.current
     if (!video) return
+    setError(null)
 
     const isHlsStream = streamUrl.includes('.m3u8')
+    // .ts brut (live direct ou catch-up) : ni HLS.js ni <video src> ne le lisent nativement → mpegts.js
+    const isRawTs = !isHlsStream && streamUrl.includes('.ts')
     // Page HTTPS → passer par le proxy pour éviter le mixed content
     const url = needsProxy()
       ? (isHlsStream ? `/hls?url=${encodeURIComponent(streamUrl)}` : `/proxy?target=${encodeURIComponent(streamUrl)}`)
@@ -39,18 +45,30 @@ export default function Player({ streamUrl, title, cover, channel, creds, onClos
       hls.loadSource(url)
       hls.attachMedia(video)
       hls.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(() => {}))
+      hls.on(Hls.Events.ERROR, (_, data) => { if (data.fatal) setError('Impossible de lire ce contenu.') })
+    } else if (isRawTs && mpegts.isSupported()) {
+      const player = mpegts.createPlayer({ type: 'mse', isLive: false, url })
+      mpegtsRef.current = player
+      player.attachMediaElement(video)
+      player.on(mpegts.Events.ERROR, () => setError('Ce programme n\'est pas disponible en replay sur cet abonnement.'))
+      player.load()
+      player.play()?.catch?.(() => {})
     } else {
       // VOD (.mp4/.mkv) ou HLS natif (Safari) : lecture directe
       video.src = url
       video.play().catch(() => {})
     }
-    // Reprise de lecture pour la VOD (pas pour le live)
-    const detachResume = isHlsStream ? null : attachResume(video, streamUrl)
+    // Reprise de lecture pour la VOD (pas pour le live) — kind déduit du titre
+    // (les épisodes contiennent "S01E02", Player ne reçoit pas cette distinction en prop)
+    const kind = /S\d+E\d+/i.test(title) ? 'episode' : 'movie'
+    const detachResume = (isHlsStream || isRawTs) ? null : attachResume(video, streamUrl, { title, poster: cover, kind })
 
     return () => {
       detachResume?.()
       hlsRef.current?.destroy()
       hlsRef.current = null
+      mpegtsRef.current?.destroy()
+      mpegtsRef.current = null
       stopVideo(video)
     }
   }, [streamUrl])
@@ -95,6 +113,14 @@ export default function Player({ streamUrl, title, cover, channel, creds, onClos
         controls={false}
         autoPlay
       />
+
+      {error && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/90 p-4 z-10">
+          <svg className="w-8 h-8 text-gray-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
+          <div className="text-gray-300 text-sm text-center max-w-xs">{error}</div>
+          <button onClick={onClose} className="text-xs px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition">Fermer</button>
+        </div>
+      )}
 
       {/* Top bar */}
       <div className={`absolute top-0 left-0 right-0 bg-gradient-to-b from-black/90 to-transparent p-4 flex items-center gap-3 transition-opacity duration-300 ${showControls ? 'opacity-100' : 'opacity-0'}`}>

@@ -160,7 +160,7 @@ export interface EPGItem {
   has_archive: number
 }
 
-export type ViewType = 'live' | 'movies' | 'series' | 'favorites' | 'playlists'
+export type ViewType = 'home' | 'live' | 'movies' | 'series' | 'radio' | 'favorites' | 'playlists'
 
 export interface XtreamPlaylist {
   id: string

@@ -116,7 +116,7 @@ export default function Movies({ creds, onPlay, jump }: Props) {
     const url = needsProxy() ? `/proxy?target=${encodeURIComponent(direct)}` : direct
     const video = videoRef.current
     hlsRef.current?.destroy()
-    const detachResume = attachResume(video, direct)
+    const detachResume = attachResume(video, direct, { title: selected.name, poster: selected.stream_icon || selected.cover, kind: 'movie' })
     video.src = url
     video.load()
     video.play().catch(() => {})

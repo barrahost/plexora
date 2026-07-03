@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo, useRef } from 'react'
 import type { XtreamCredentials, XtreamCategory, XtreamChannel, EPGItem } from '../types/xtream'
-import { XtreamAPI, getFavorites, toggleFavorite, needsProxy, stopVideo } from '../utils/api'
+import { XtreamAPI, getFavorites, toggleFavorite, needsProxy, stopVideo, fixMojibake } from '../utils/api'
 import { ChannelLogo, LiveTVSkeleton, LoadMore, PAGE_SIZE } from './ui'
 import { getXmltvEpg } from '../utils/epg'
 import Hls from 'hls.js'
@@ -35,6 +35,7 @@ export default function LiveTV({ creds, onPlay, jump }: Props) {
   const [audioTracks, setAudioTracks] = useState<{ id: number; name: string }[]>([])
   const [currentAudio, setCurrentAudio] = useState(0)
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>(() => (localStorage.getItem('iptv_channel_view') === 'grid' ? 'grid' : 'list'))
   const videoRef = useRef<HTMLVideoElement>(null)
   const hlsRef = useRef<Hls | null>(null)
   const mpegtsRef = useRef<mpegts.Player | null>(null)
@@ -82,7 +83,7 @@ export default function LiveTV({ creds, onPlay, jump }: Props) {
     // le serveur refuse souvent les requêtes API pendant qu'un flux est ouvert.
     // Si get_short_epg est vide (fréquent sur ce serveur), fallback sur le
     // guide XMLTV complet (téléchargé une fois par session).
-    const epgPromise = api.getEPG(activeChannel.stream_id)
+    const epgPromise = api.getEPG(activeChannel.stream_id, 24)
       .then(data => (Array.isArray(data.epg_listings) ? data.epg_listings : []))
       .catch(() => [] as EPGItem[])
       .then(async list => {
@@ -215,11 +216,43 @@ export default function LiveTV({ creds, onPlay, jump }: Props) {
     setFavorites(toggleFavorite(id))
   }
 
+  function toggleViewMode() {
+    setViewMode(m => {
+      const next = m === 'list' ? 'grid' : 'list'
+      localStorage.setItem('iptv_channel_view', next)
+      return next
+    })
+  }
+
+  const ViewModeToggle = (
+    <button
+      onClick={toggleViewMode}
+      className="w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 transition"
+      style={{ touchAction: 'manipulation' }}
+      title={viewMode === 'list' ? 'Vue grille' : 'Vue liste'}
+    >
+      {viewMode === 'list' ? (
+        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M4 4h6v6H4zm10 0h6v6h-6zM4 14h6v6H4zm10 0h6v6h-6z"/></svg>
+      ) : (
+        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z"/></svg>
+      )}
+    </button>
+  )
+
   function handleFullscreen() {
     if (!activeChannel) return
     const m3u8 = api.getLiveStreamUrl(activeChannel.stream_id, 'm3u8')
     const url = `/hls?url=${encodeURIComponent(m3u8)}`
     onPlay(url, activeChannel.name, activeChannel.stream_icon, activeChannel)
+  }
+
+  // Catch-up : rejoue un programme déjà diffusé (nécessite tv_archive sur la chaîne)
+  function handleCatchup(item: EPGItem) {
+    if (!activeChannel) return
+    const durationMin = Math.round((item.stop_timestamp - item.start_timestamp) / 60)
+    const direct = api.getCatchupUrl(activeChannel.stream_id, item.start_timestamp, durationMin)
+    const url = needsProxy() ? `/proxy?target=${encodeURIComponent(direct)}` : direct
+    onPlay(url, `${activeChannel.name} · ${decodeHtml(item.title)}`, activeChannel.stream_icon)
   }
 
   function handleSelectCat(id: string, name: string) {
@@ -236,7 +269,6 @@ export default function LiveTV({ creds, onPlay, jump }: Props) {
   const nowSec = Date.now() / 1000
   const nowPlaying = epg.find(e => e.start_timestamp <= nowSec && e.stop_timestamp > nowSec)
     ?? epg.find(e => Number(e.now_playing) === 1) // fallback si timestamps absents
-  const upcoming = epg.filter(e => e.start_timestamp > nowSec).slice(0, 3)
 
   if (loading) return <LiveTVSkeleton />
 
@@ -315,6 +347,7 @@ export default function LiveTV({ creds, onPlay, jump }: Props) {
           <div className="text-white font-semibold text-sm truncate">{selectedCatName}</div>
           <div className="text-gray-500 text-xs">{filtered.length} chaînes</div>
         </div>
+        {ViewModeToggle}
       </div>
       {/* Recherche */}
       <div className="px-3 py-2 border-b border-gray-800 flex-shrink-0">
@@ -336,34 +369,40 @@ export default function LiveTV({ creds, onPlay, jump }: Props) {
       <div className="flex-1 overflow-y-auto overscroll-contain">
         {filtered.length === 0 ? (
           <div className="flex items-center justify-center h-32 text-gray-600 text-sm">Aucune chaîne</div>
-        ) : visibleChannels.map((ch, idx) => {
-          const active = activeChannel?.stream_id === ch.stream_id
-          const isFav = favorites.includes(ch.stream_id)
-          return (
-            <div
-              key={ch.stream_id}
-              onClick={() => handleSelectChannel(ch)}
-              className={`flex items-center gap-3 px-4 border-b border-gray-800/40 transition-colors ${active ? 'bg-orange-500/20 border-l-4 border-l-orange-400' : 'active:bg-gray-800'}`}
-              style={{ minHeight: 60, touchAction: 'manipulation', cursor: 'pointer' }}
-            >
-              <ChannelLogo name={ch.name} icon={ch.stream_icon} className="w-10 h-10 flex-shrink-0 rounded-lg overflow-hidden" />
-              <div className="flex-1 min-w-0">
-                <div className={`text-sm font-medium truncate ${active ? 'text-orange-400' : 'text-gray-200'}`}>{ch.name}</div>
-              </div>
-              <div
-                onClick={e => handleFavorite(e, ch.stream_id)}
-                className="w-10 h-10 flex items-center justify-center flex-shrink-0"
-                style={{ touchAction: 'manipulation' }}
-              >
-                <svg className={`w-4 h-4 ${isFav ? 'text-red-400' : 'text-gray-700'}`} viewBox="0 0 24 24" fill={isFav ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
-                  <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
-                </svg>
-              </div>
-              <div className="flex-shrink-0 w-8 h-6 bg-violet-700 rounded-md flex items-center justify-center text-white text-xs font-bold">{idx + 1}</div>
-            </div>
-          )
-        })}
-        <LoadMore hasMore={hasMore} onMore={loadMore} />
+        ) : viewMode === 'grid' ? (
+          <ChannelGrid channels={visibleChannels} activeChannel={activeChannel} favorites={favorites} onSelect={handleSelectChannel} onFavorite={handleFavorite} hasMore={hasMore} onMore={loadMore} />
+        ) : (
+          <>
+            {visibleChannels.map((ch, idx) => {
+              const active = activeChannel?.stream_id === ch.stream_id
+              const isFav = favorites.includes(ch.stream_id)
+              return (
+                <div
+                  key={ch.stream_id}
+                  onClick={() => handleSelectChannel(ch)}
+                  className={`flex items-center gap-3 px-4 border-b border-gray-800/40 transition-colors ${active ? 'bg-orange-500/20 border-l-4 border-l-orange-400' : 'active:bg-gray-800'}`}
+                  style={{ minHeight: 60, touchAction: 'manipulation', cursor: 'pointer' }}
+                >
+                  <ChannelLogo name={ch.name} icon={ch.stream_icon} className="w-10 h-10 flex-shrink-0 rounded-lg overflow-hidden" />
+                  <div className="flex-1 min-w-0">
+                    <div className={`text-sm font-medium truncate ${active ? 'text-orange-400' : 'text-gray-200'}`}>{ch.name}</div>
+                  </div>
+                  <div
+                    onClick={e => handleFavorite(e, ch.stream_id)}
+                    className="w-10 h-10 flex items-center justify-center flex-shrink-0"
+                    style={{ touchAction: 'manipulation' }}
+                  >
+                    <svg className={`w-4 h-4 ${isFav ? 'text-red-400' : 'text-gray-700'}`} viewBox="0 0 24 24" fill={isFav ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
+                      <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+                    </svg>
+                  </div>
+                  <div className="flex-shrink-0 w-8 h-6 bg-violet-700 rounded-md flex items-center justify-center text-white text-xs font-bold">{idx + 1}</div>
+                </div>
+              )
+            })}
+            <LoadMore hasMore={hasMore} onMore={loadMore} />
+          </>
+        )}
       </div>
     </div>
   )
@@ -445,19 +484,9 @@ export default function LiveTV({ creds, onPlay, jump }: Props) {
             </div>
           </div>
         )}
-        {!epgLoading && upcoming.map((item, i) => (
-          <div key={i} className="px-4 py-3 border-b border-gray-800/50">
-            <div className="flex items-center gap-2 mb-1">
-              <svg className="w-3.5 h-3.5 text-gray-500 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67V7z"/>
-              </svg>
-              <div className="text-gray-200 text-sm font-medium">{decodeHtml(item.title)}</div>
-            </div>
-            <div className="flex justify-between text-xs text-gray-500">
-              <span>{formatTime(item.start)}</span><span>{formatTime(item.end)}</span>
-            </div>
-          </div>
-        ))}
+        {!epgLoading && epg.length > 0 && (
+          <EPGTimeline items={epg} nowSec={nowSec} canArchive={activeChannel?.tv_archive === 1} onCatchup={handleCatchup} />
+        )}
         {!epgLoading && epg.length === 0 && (
           <div className="p-4 text-gray-600 text-sm">Guide des programmes non fourni pour cette chaîne.</div>
         )}
@@ -502,32 +531,39 @@ export default function LiveTV({ creds, onPlay, jump }: Props) {
 
       {/* Col 2 : Chaînes */}
       <div className="w-72 flex-shrink-0 bg-gray-950 border-r border-gray-800 flex flex-col overflow-hidden">
-        <div className="p-3 border-b border-gray-800">
-          <div className="relative">
+        <div className="p-3 border-b border-gray-800 flex items-center gap-2">
+          <div className="relative flex-1">
             <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
             <input type="search" value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher..." className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:border-violet-500 placeholder-gray-500" />
           </div>
+          {ViewModeToggle}
         </div>
         <div className="flex-1 overflow-y-auto">
           {filtered.length === 0 ? (
             <div className="flex items-center justify-center h-32 text-gray-600 text-sm">Aucune chaîne</div>
-          ) : visibleChannels.map((ch, idx) => {
-            const active = activeChannel?.stream_id === ch.stream_id
-            const isFav = favorites.includes(ch.stream_id)
-            return (
-              <div key={ch.stream_id} onClick={() => setActiveChannel(ch)} className={`flex items-center gap-3 px-3 py-2.5 border-b border-gray-800/40 cursor-pointer transition-colors group ${active ? 'bg-orange-500/20 border-l-4 border-l-orange-400' : 'hover:bg-gray-800/60'}`} style={{ touchAction: 'manipulation' }}>
-                <ChannelLogo name={ch.name} icon={ch.stream_icon} className="w-9 h-9 flex-shrink-0 rounded-md overflow-hidden" />
-                <div className="flex-1 min-w-0">
-                  <div className={`text-sm font-medium truncate ${active ? 'text-orange-400' : 'text-gray-200'}`}>{ch.name}</div>
-                </div>
-                <div onClick={e => handleFavorite(e, ch.stream_id)} className="opacity-0 group-hover:opacity-100 transition flex-shrink-0 cursor-pointer p-1" style={{ touchAction: 'manipulation' }}>
-                  <svg className={`w-3.5 h-3.5 ${isFav ? 'text-red-400' : 'text-gray-600'}`} viewBox="0 0 24 24" fill={isFav ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
-                </div>
-                <div className="flex-shrink-0 w-8 h-6 bg-violet-700 rounded-md flex items-center justify-center text-white text-xs font-bold">{idx + 1}</div>
-              </div>
-            )
-          })}
-          <LoadMore hasMore={hasMore} onMore={loadMore} />
+          ) : viewMode === 'grid' ? (
+            <ChannelGrid channels={visibleChannels} activeChannel={activeChannel} favorites={favorites} onSelect={setActiveChannel} onFavorite={handleFavorite} hasMore={hasMore} onMore={loadMore} />
+          ) : (
+            <>
+              {visibleChannels.map((ch, idx) => {
+                const active = activeChannel?.stream_id === ch.stream_id
+                const isFav = favorites.includes(ch.stream_id)
+                return (
+                  <div key={ch.stream_id} onClick={() => setActiveChannel(ch)} className={`flex items-center gap-3 px-3 py-2.5 border-b border-gray-800/40 cursor-pointer transition-colors group ${active ? 'bg-orange-500/20 border-l-4 border-l-orange-400' : 'hover:bg-gray-800/60'}`} style={{ touchAction: 'manipulation' }}>
+                    <ChannelLogo name={ch.name} icon={ch.stream_icon} className="w-9 h-9 flex-shrink-0 rounded-md overflow-hidden" />
+                    <div className="flex-1 min-w-0">
+                      <div className={`text-sm font-medium truncate ${active ? 'text-orange-400' : 'text-gray-200'}`}>{ch.name}</div>
+                    </div>
+                    <div onClick={e => handleFavorite(e, ch.stream_id)} className="opacity-0 group-hover:opacity-100 transition flex-shrink-0 cursor-pointer p-1" style={{ touchAction: 'manipulation' }}>
+                      <svg className={`w-3.5 h-3.5 ${isFav ? 'text-red-400' : 'text-gray-600'}`} viewBox="0 0 24 24" fill={isFav ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+                    </div>
+                    <div className="flex-shrink-0 w-8 h-6 bg-violet-700 rounded-md flex items-center justify-center text-white text-xs font-bold">{idx + 1}</div>
+                  </div>
+                )
+              })}
+              <LoadMore hasMore={hasMore} onMore={loadMore} />
+            </>
+          )}
         </div>
       </div>
 
@@ -633,18 +669,9 @@ export default function LiveTV({ creds, onPlay, jump }: Props) {
                   <div className="text-xs text-gray-600 mt-1">{formatDate(nowPlaying.start)}</div>
                 </div>
               )}
-              {!epgLoading && upcoming.map((item, i) => (
-                <div key={i} className="px-4 py-3 border-b border-gray-800/50">
-                  <div className="flex items-start gap-2 mb-1">
-                    <svg className="w-3.5 h-3.5 text-gray-500 flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="currentColor"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67V7z"/></svg>
-                    <div className="min-w-0">
-                      <div className="text-gray-200 text-sm font-medium leading-snug">{decodeHtml(item.title)}</div>
-                      {item.description && <div className="text-gray-500 text-xs mt-0.5 line-clamp-2">{decodeHtml(item.description)}</div>}
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between text-xs text-gray-500 mt-1.5"><span>{formatTime(item.start)}</span><span>{formatTime(item.end)}</span></div>
-                </div>
-              ))}
+              {!epgLoading && epg.length > 0 && (
+                <EPGTimeline items={epg} nowSec={nowSec} canArchive={activeChannel?.tv_archive === 1} onCatchup={handleCatchup} />
+              )}
               {!epgLoading && epg.length === 0 && <div className="p-4 text-gray-600 text-sm">Guide des programmes non fourni pour cette chaîne.</div>}
             </div>
           </>
@@ -706,6 +733,98 @@ function friendlyPlayerError(details: string): string {
   return 'Impossible de lire cette chaîne.'
 }
 
+// ── Grille de chaînes (mode alternatif à la liste) ──────────────────────────
+function ChannelGrid({ channels, activeChannel, favorites, onSelect, onFavorite, hasMore, onMore }: {
+  channels: XtreamChannel[]
+  activeChannel: XtreamChannel | null
+  favorites: number[]
+  onSelect: (ch: XtreamChannel) => void
+  onFavorite: (e: React.MouseEvent, id: number) => void
+  hasMore: boolean
+  onMore: () => void
+}) {
+  return (
+    <div className="p-3">
+      <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-3 xl:grid-cols-4 gap-2.5">
+        {channels.map((ch, idx) => {
+          const active = activeChannel?.stream_id === ch.stream_id
+          const isFav = favorites.includes(ch.stream_id)
+          return (
+            <div
+              key={ch.stream_id}
+              onClick={() => onSelect(ch)}
+              className={`group relative rounded-xl overflow-hidden cursor-pointer transition ${active ? 'ring-2 ring-orange-400' : 'hover:ring-2 hover:ring-violet-500'}`}
+              style={{ touchAction: 'manipulation' }}
+            >
+              <ChannelLogo name={ch.name} icon={ch.stream_icon} className="w-full aspect-square" textClass="text-lg" />
+              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 to-transparent p-1.5 pt-4">
+                <span className={`text-[10px] font-medium line-clamp-1 ${active ? 'text-orange-400' : 'text-gray-200'}`}>{ch.name}</span>
+              </div>
+              <span className="absolute top-1 left-1 text-[9px] font-bold bg-black/70 text-white px-1 py-0.5 rounded">{idx + 1}</span>
+              <div
+                onClick={e => onFavorite(e, ch.stream_id)}
+                className="absolute top-1 right-1 w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition"
+                style={{ touchAction: 'manipulation' }}
+              >
+                <svg className={`w-3.5 h-3.5 drop-shadow ${isFav ? 'text-red-400' : 'text-white'}`} viewBox="0 0 24 24" fill={isFav ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
+                  <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+                </svg>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      <LoadMore hasMore={hasMore} onMore={onMore} />
+    </div>
+  )
+}
+
+// ── Timeline EPG horizontale ─────────────────────────────────────────────────
+// Cartes défilables : programmes passés (catch-up si dispo), en cours, à venir.
+function EPGTimeline({ items, nowSec, canArchive, onCatchup }: {
+  items: EPGItem[]
+  nowSec: number
+  canArchive: boolean
+  onCatchup: (item: EPGItem) => void
+}) {
+  if (items.length === 0) return null
+  return (
+    <div className="flex gap-2 overflow-x-auto px-4 py-3 border-b border-gray-800/50" style={{ scrollbarWidth: 'thin' }}>
+      {items.map((item, i) => {
+        const isPast = item.stop_timestamp <= nowSec
+        const isNow = item.start_timestamp <= nowSec && item.stop_timestamp > nowSec
+        const clickable = isPast && canArchive
+        return (
+          <div
+            key={i}
+            onClick={() => clickable && onCatchup(item)}
+            className={`flex-shrink-0 w-36 rounded-lg p-2.5 border transition ${
+              isNow ? 'bg-orange-400/15 border-orange-400/50'
+              : clickable ? 'bg-gray-800/80 border-gray-700 hover:border-violet-500 cursor-pointer'
+              : 'bg-gray-800/40 border-gray-800'
+            }`}
+            style={{ touchAction: 'manipulation' }}
+          >
+            <div className="flex items-center justify-between mb-1">
+              <span className={`text-[10px] font-mono ${isNow ? 'text-orange-400' : 'text-gray-500'}`}>{formatTime(item.start)}</span>
+              {isNow && <span className="text-[9px] font-bold text-orange-400 uppercase">Direct</span>}
+              {clickable && <svg className="w-3 h-3 text-violet-400" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>}
+            </div>
+            <div className={`text-xs font-medium leading-snug line-clamp-2 ${isPast && !clickable ? 'text-gray-600' : 'text-gray-200'}`}>
+              {decodeHtml(item.title)}
+            </div>
+            {isNow && (
+              <div className="h-1 bg-white/20 rounded-full overflow-hidden mt-2">
+                <div className="h-full bg-orange-400 rounded-full" style={{ width: `${getProgress(item.start_timestamp, item.stop_timestamp)}%` }} />
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 function decodeHtml(str: string): string {
   if (!str) return ''
   try {
@@ -715,12 +834,16 @@ function decodeHtml(str: string): string {
     // ordinaire ("Journal") serait transformé en binaire.
     const trimmed = str.trim()
     if (trimmed.length >= 8 && trimmed.length % 4 === 0 && /^[A-Za-z0-9+/]+=*$/.test(trimmed)) {
-      const candidate = atob(trimmed)
+      const binary = atob(trimmed)
+      // atob() renvoie une chaîne latin1 (1 char = 1 octet) ; le contenu réel
+      // est de l'UTF-8 → sans reconversion, les accents s'affichent "Ã©" etc.
+      const bytes = Uint8Array.from(binary, c => c.charCodeAt(0))
+      const candidate = new TextDecoder('utf-8').decode(bytes)
       const printable = candidate.split('').filter(c => c >= ' ' || c === '\n').length / candidate.length
       if (printable > 0.9) decoded = candidate
     }
     const t = document.createElement('textarea')
     t.innerHTML = decoded
-    return t.value
+    return fixMojibake(t.value)
   } catch { return str }
 }

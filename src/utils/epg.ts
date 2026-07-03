@@ -1,5 +1,5 @@
 import type { XtreamCredentials, EPGItem } from '../types/xtream'
-import { needsProxy, normalizeServerUrl } from './api'
+import { needsProxy, normalizeServerUrl, fixMojibake } from './api'
 
 // ── Fallback EPG via XMLTV ───────────────────────────────────────────────────
 // get_short_epg est souvent vide sur ce serveur alors que le guide complet
@@ -40,7 +40,16 @@ async function fetchAndParse(creds: XtreamCredentials): Promise<Map<string, EPGI
   const url = needsProxy() ? `/proxy?target=${encodeURIComponent(direct)}` : direct
   const res = await fetch(url)
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  const text = await res.text()
+  // res.text() suppose UTF-8 par défaut ; si le serveur sert en ISO-8859-1
+  // sans le déclarer correctement, les accents sont corrompus ("Ã©").
+  // On lit les octets bruts et on détecte l'encodage annoncé par le XML.
+  const buf = await res.arrayBuffer()
+  const head = new TextDecoder('ascii').decode(buf.slice(0, 200))
+  const encMatch = head.match(/encoding=["']([\w-]+)["']/i)
+  const encoding = (encMatch?.[1] || 'utf-8').toLowerCase()
+  let text: string
+  try { text = new TextDecoder(encoding).decode(buf) }
+  catch { text = new TextDecoder('utf-8').decode(buf) }
 
   const map = new Map<string, EPGItem[]>()
   // Parsing regex : DOMParser sur ~20 MB est trop lourd, on scanne les blocs <programme>
@@ -94,9 +103,10 @@ function parseXmltvDate(s: string): number {
 }
 
 function unescapeXml(s: string): string {
-  return s
-    .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"').replace(/&apos;/g, "'")
-    .replace(/&amp;/g, '&')
-    .trim()
+  return fixMojibake(
+    s.replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"').replace(/&apos;/g, "'")
+      .replace(/&amp;/g, '&')
+      .trim()
+  )
 }

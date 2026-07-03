@@ -6,10 +6,17 @@ const STORE_KEY = 'iptv_resume'
 const MAX_ENTRIES = 200
 const MIN_SECONDS = 30 // en dessous, pas la peine de reprendre
 
+export interface ResumeMeta {
+  title: string
+  poster?: string
+  kind: 'movie' | 'episode'
+}
+
 interface ResumeEntry {
   t: number // position (secondes)
   d: number // durée totale connue
   at: number // timestamp de sauvegarde
+  meta?: ResumeMeta
 }
 
 function loadStore(): Record<string, ResumeEntry> {
@@ -33,9 +40,10 @@ export function getResume(key: string): number | null {
   return e.t
 }
 
-function setResume(key: string, t: number, d: number): void {
+function setResume(key: string, t: number, d: number, meta?: ResumeMeta): void {
   const store = loadStore()
-  store[key] = { t: Math.floor(t), d: Math.floor(d || 0), at: Date.now() }
+  const prevMeta = store[key]?.meta
+  store[key] = { t: Math.floor(t), d: Math.floor(d || 0), at: Date.now(), meta: meta ?? prevMeta }
   saveStore(store)
 }
 
@@ -45,8 +53,19 @@ function clearResume(key: string): void {
   saveStore(store)
 }
 
+// Liste pour la vitrine "Continuer à regarder" : entrées avec métadonnées,
+// non terminées, triées par date de visionnage la plus récente.
+export function listResume(limit = 20): Array<{ key: string; t: number; d: number; meta: ResumeMeta }> {
+  const store = loadStore()
+  return Object.entries(store)
+    .filter((e): e is [string, ResumeEntry & { meta: ResumeMeta }] => !!e[1].meta && e[1].t >= MIN_SECONDS && (!e[1].d || e[1].t <= e[1].d * 0.95))
+    .sort((a, b) => b[1].at - a[1].at)
+    .slice(0, limit)
+    .map(([key, e]) => ({ key, t: e.t, d: e.d, meta: e.meta }))
+}
+
 // Branche la reprise sur un élément video. Retourne une fonction de nettoyage.
-export function attachResume(video: HTMLVideoElement, key: string): () => void {
+export function attachResume(video: HTMLVideoElement, key: string, meta?: ResumeMeta): () => void {
   let lastSave = 0
 
   const onLoaded = () => {
@@ -57,7 +76,7 @@ export function attachResume(video: HTMLVideoElement, key: string): () => void {
     const now = Date.now()
     if (now - lastSave > 5000 && video.currentTime > MIN_SECONDS) {
       lastSave = now
-      setResume(key, video.currentTime, video.duration)
+      setResume(key, video.currentTime, video.duration, meta)
     }
   }
   const onEnded = () => clearResume(key)
@@ -67,7 +86,7 @@ export function attachResume(video: HTMLVideoElement, key: string): () => void {
   video.addEventListener('ended', onEnded)
 
   return () => {
-    if (video.currentTime > MIN_SECONDS) setResume(key, video.currentTime, video.duration)
+    if (video.currentTime > MIN_SECONDS) setResume(key, video.currentTime, video.duration, meta)
     video.removeEventListener('loadedmetadata', onLoaded)
     video.removeEventListener('timeupdate', onTime)
     video.removeEventListener('ended', onEnded)
