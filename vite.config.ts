@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
 import type { Plugin } from 'vite'
 import type { IncomingMessage, ServerResponse } from 'http'
 
@@ -93,7 +94,7 @@ function devProxy(): Plugin {
 }
 
 export default defineConfig({
-  plugins: [react(), devProxy()],
+  plugins: [react(), tailwindcss(), devProxy()],
   server: {
     port: parseInt(process.env.PORT || '5177'),
     strictPort: false,
