@@ -4,6 +4,7 @@ import { XtreamAPI, getFavorites, toggleFavorite, needsProxy, stopVideo } from '
 import { GridSkeleton, CodecBadge, TechChips, openInVlc, LoadMore, PAGE_SIZE, tvProps } from './ui'
 import { attachResume } from '../utils/resume'
 import { loadCached, saveCached, cacheKey } from '../utils/cache'
+import { useBackHandler } from '../utils/backStack'
 import type { TechInfoData } from './ui'
 import Hls from 'hls.js'
 
@@ -52,6 +53,18 @@ export default function Movies({ creds, onPlay, jump }: Props) {
     setPlaying(false)
     setMobileStep('detail')
   }, [jump])
+
+  // Bouton Retour : ferme le film ouvert avant de remonter au niveau supérieur
+  useBackHandler(() => {
+    if (selected) {
+      setSelected(null)
+      setPlaying(false)
+      setMobileStep(m => (m === 'detail' ? 'movies' : m))
+      return true
+    }
+    if (mobileStep !== 'categories') { setMobileStep('categories'); return true }
+    return false
+  })
 
   useEffect(() => {
     const key = cacheKey('movies', creds)

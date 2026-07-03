@@ -5,6 +5,7 @@ import { ChannelLogo, LiveTVSkeleton, LoadMore, PAGE_SIZE, tvProps } from './ui'
 import { getXmltvEpg } from '../utils/epg'
 import { loadCached, saveCached, cacheKey } from '../utils/cache'
 import { getHlsBufferConfig } from '../utils/buffer'
+import { useBackHandler } from '../utils/backStack'
 import Hls from 'hls.js'
 import mpegts from 'mpegts.js'
 
@@ -51,6 +52,18 @@ export default function LiveTV({ creds, onPlay, jump }: Props) {
     setActiveChannel(jump.item)
     setMobileStep('player')
   }, [jump])
+
+  // Bouton Retour : referme la chaîne active (desktop et mobile) avant de
+  // remonter au niveau supérieur de l'app
+  useBackHandler(() => {
+    if (activeChannel) {
+      setActiveChannel(null)
+      setMobileStep(m => (m === 'player' ? 'channels' : m))
+      return true
+    }
+    if (mobileStep !== 'categories') { setMobileStep('categories'); return true }
+    return false
+  })
 
   useEffect(() => {
     const key = cacheKey('live', creds)

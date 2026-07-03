@@ -3,6 +3,7 @@ import type { XtreamCredentials } from '../types/xtream'
 import PlaylistManager from './PlaylistManager'
 import { getBufferMode, setBufferMode } from '../utils/buffer'
 import type { BufferMode } from '../utils/buffer'
+import { useBackHandler } from '../utils/backStack'
 
 interface Props {
   onSwitch: (creds: XtreamCredentials, playlistId: string) => void
@@ -17,6 +18,12 @@ const BUFFER_OPTIONS: { id: BufferMode; label: string; desc: string }[] = [
 export default function Settings({ onSwitch }: Props) {
   const [tab, setTab] = useState<'comptes' | 'lecture'>('comptes')
   const [buffer, setBuffer] = useState<BufferMode>(getBufferMode())
+
+  // Bouton Retour : revient à l'onglet Comptes (racine de cet écran) avant de remonter
+  useBackHandler(() => {
+    if (tab !== 'comptes') { setTab('comptes'); return true }
+    return false
+  })
 
   function handleBufferChange(mode: BufferMode) {
     setBufferMode(mode)

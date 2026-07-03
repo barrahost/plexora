@@ -4,6 +4,7 @@ import { XtreamAPI, needsProxy, stopVideo } from '../utils/api'
 import { GridSkeleton, CodecBadge, TechChips, openInVlc, LoadMore, PAGE_SIZE, tvProps } from './ui'
 import { attachResume } from '../utils/resume'
 import { loadCached, saveCached, cacheKey } from '../utils/cache'
+import { useBackHandler } from '../utils/backStack'
 
 import Hls from 'hls.js'
 
@@ -64,6 +65,18 @@ export default function SeriesView({ creds, onPlay, jump }: Props) {
   const [activeEp, setActiveEp] = useState<EpisodeData | null>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
   const hlsRef = useRef<Hls | null>(null)
+
+  // Bouton Retour : arrête l'épisode, puis ferme la série, avant de remonter
+  useBackHandler(() => {
+    if (activeEp) { setActiveEp(null); return true }
+    if (selected) {
+      setSelected(null)
+      setMobileStep(m => (m === 'detail' ? 'series' : m))
+      return true
+    }
+    if (mobileStep !== 'categories') { setMobileStep('categories'); return true }
+    return false
+  })
 
   useEffect(() => {
     const key = cacheKey('series', creds)

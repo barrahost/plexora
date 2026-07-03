@@ -12,6 +12,7 @@ import Settings from './components/Settings'
 import GlobalSearch from './components/GlobalSearch'
 import { prefetchXmltv } from './utils/epg'
 import { isTV, enableTVNavigation } from './utils/tvNav'
+import { tryHandleBack } from './utils/backStack'
 import { App as CapacitorApp } from '@capacitor/app'
 import { Capacitor } from '@capacitor/core'
 import { checkForUpdate, openApkUrl } from './utils/updateCheck'
@@ -112,15 +113,26 @@ export default function App() {
     checkForUpdate().then(setUpdateInfo)
   }, [])
 
-  // Bouton Retour (télécommande/Android) : ferme d'abord ce qui est ouvert
-  // (recherche, menu, lecteur), puis quitte l'app sur un double appui rapide
+  // Bouton Retour (télécommande/Android), par ordre de priorité :
+  // 1) un champ de saisie a le focus → le défocus seulement (n'agit pas comme "retour")
+  // 2) une modale globale est ouverte (recherche, menu, lecteur) → la fermer
+  // 3) l'écran actif a une navigation interne à reculer (catégorie→liste→détail) → un niveau
+  // 4) un onglet non racine est actif → retour à Live TV
+  // 5) déjà à la racine → quitter sur un double appui sous 2s
   useEffect(() => {
     let lastBack = 0
     let hintTimer: ReturnType<typeof setTimeout> | null = null
     const listener = CapacitorApp.addListener('backButton', () => {
+      const active = document.activeElement as HTMLElement | null
+      if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) {
+        active.blur()
+        return
+      }
       if (searchOpen) { setSearchOpen(false); return }
       if (mobileMoreOpen) { setMobileMoreOpen(false); return }
       if (playing) { setPlaying(null); return }
+      if (tryHandleBack()) return
+      if (view !== 'live') { setView('live'); return }
       const now = Date.now()
       if (now - lastBack < 2000) {
         CapacitorApp.exitApp()
@@ -135,7 +147,7 @@ export default function App() {
       listener.then(h => h.remove())
       if (hintTimer) clearTimeout(hintTimer)
     }
-  }, [searchOpen, mobileMoreOpen, playing])
+  }, [searchOpen, mobileMoreOpen, playing, view])
 
   // Fermeture d'onglet / navigation : couper tous les flux pour libérer
   // la connexion IPTV (max_connections=1) immédiatement côté serveur

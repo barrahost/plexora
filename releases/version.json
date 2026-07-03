@@ -1,5 +1,5 @@
 {
-  "versionCode": 5,
-  "versionName": "1.4",
-  "notes": "Correction : navigation D-pad activee de facon fiable sur toute app native"
+  "versionCode": 6,
+  "versionName": "1.5",
+  "notes": "Bouton Retour : defocus, puis navigation en profondeur, puis double-clic pour quitter"
 }

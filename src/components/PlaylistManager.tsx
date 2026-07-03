@@ -5,6 +5,7 @@ import {
   getActivePlaylistId, setActivePlaylistId,
 } from '../utils/api'
 import { XtreamAPI, normalizeServerUrl } from '../utils/api'
+import { useBackHandler } from '../utils/backStack'
 
 interface Props {
   onSwitch: (creds: XtreamCredentials, playlistId: string) => void
@@ -27,6 +28,13 @@ export default function PlaylistManager({ onSwitch }: Props) {
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<'ok' | 'error' | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
+
+  // Bouton Retour : referme le formulaire (ou la confirmation de suppression) avant de remonter
+  useBackHandler(() => {
+    if (deleteConfirm) { setDeleteConfirm(null); return true }
+    if (editing) { setEditing(null); setForm(EMPTY_FORM); setTestResult(null); return true }
+    return false
+  })
 
   function refresh() { setPlaylists(getPlaylists()) }
 
