@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo, useRef } from 'react'
 import type { XtreamCredentials, XtreamCategory, XtreamMovie } from '../types/xtream'
 import { XtreamAPI, getFavorites, toggleFavorite, needsProxy, stopVideo } from '../utils/api'
 import { GridSkeleton, CodecBadge, TechChips, openInVlc, LoadMore, PAGE_SIZE } from './ui'
+import { attachResume } from '../utils/resume'
 import type { TechInfoData } from './ui'
 import Hls from 'hls.js'
 
@@ -115,10 +116,11 @@ export default function Movies({ creds, onPlay, jump }: Props) {
     const url = needsProxy() ? `/proxy?target=${encodeURIComponent(direct)}` : direct
     const video = videoRef.current
     hlsRef.current?.destroy()
+    const detachResume = attachResume(video, direct)
     video.src = url
     video.load()
     video.play().catch(() => {})
-    return () => { stopVideo(video) }
+    return () => { detachResume(); stopVideo(video) }
   }, [playing, selected, api])
 
   function handleSelectCat(id: string, name: string) {

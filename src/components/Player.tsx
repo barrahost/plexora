@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import Hls from 'hls.js'
 import type { XtreamChannel, XtreamMovie, EPGItem } from '../types/xtream'
 import { XtreamAPI, needsProxy, stopVideo } from '../utils/api'
+import { attachResume } from '../utils/resume'
 import type { XtreamCredentials } from '../types/xtream'
 
 interface Props {
@@ -43,8 +44,11 @@ export default function Player({ streamUrl, title, cover, channel, creds, onClos
       video.src = url
       video.play().catch(() => {})
     }
+    // Reprise de lecture pour la VOD (pas pour le live)
+    const detachResume = isHlsStream ? null : attachResume(video, streamUrl)
 
     return () => {
+      detachResume?.()
       hlsRef.current?.destroy()
       hlsRef.current = null
       stopVideo(video)

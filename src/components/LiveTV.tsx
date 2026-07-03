@@ -4,6 +4,7 @@ import { XtreamAPI, getFavorites, toggleFavorite, needsProxy, stopVideo } from '
 import { ChannelLogo, LiveTVSkeleton, LoadMore, PAGE_SIZE } from './ui'
 import { getXmltvEpg } from '../utils/epg'
 import Hls from 'hls.js'
+import mpegts from 'mpegts.js'
 
 interface Props {
   creds: XtreamCredentials
@@ -36,6 +37,7 @@ export default function LiveTV({ creds, onPlay, jump }: Props) {
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
   const videoRef = useRef<HTMLVideoElement>(null)
   const hlsRef = useRef<Hls | null>(null)
+  const mpegtsRef = useRef<mpegts.Player | null>(null)
   const bannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const numTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -92,6 +94,26 @@ export default function LiveTV({ creds, onPlay, jump }: Props) {
       .finally(() => { if (!cancelled) setEpgLoading(false) })
 
     // 2) Puis démarrer la lecture (sans attendre plus de 5s si l'EPG traîne)
+    // Fallback : si le flux HLS (.m3u8) échoue, retenter en MPEG-TS brut (.ts)
+    // via mpegts.js — certaines chaînes ne fonctionnent qu'ainsi.
+    function startMpegtsFallback() {
+      if (cancelled || !mpegts.isSupported()) {
+        if (!cancelled) setPlayerError('Cette chaîne ne répond pas pour le moment.')
+        return
+      }
+      hlsRef.current?.destroy(); hlsRef.current = null
+      const ts = api.getLiveStreamUrl(activeChannel!.stream_id, 'ts')
+      const url = needsProxy() ? `/proxy?target=${encodeURIComponent(ts)}` : ts
+      const player = mpegts.createPlayer({ type: 'mse', isLive: true, url })
+      mpegtsRef.current = player
+      player.attachMediaElement(video)
+      player.on(mpegts.Events.ERROR, () => {
+        if (!cancelled) setPlayerError('Cette chaîne ne répond pas pour le moment.')
+      })
+      player.load()
+      player.play()?.catch?.(() => {})
+    }
+
     function startPlayback() {
       if (cancelled) return
       const m3u8 = api.getLiveStreamUrl(activeChannel!.stream_id, 'm3u8')
@@ -105,7 +127,13 @@ export default function LiveTV({ creds, onPlay, jump }: Props) {
         hls.attachMedia(video)
         hls.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(() => {}))
         hls.on(Hls.Events.ERROR, (_, data) => {
-          if (data.fatal) setPlayerError(friendlyPlayerError(data.details))
+          if (!data.fatal) return
+          // Le manifest HLS ne répond pas → tenter le flux .ts brut avant d'abandonner
+          if (data.details.includes('manifestLoad') || data.details.includes('manifestParsing') || data.details.includes('levelLoad')) {
+            startMpegtsFallback()
+          } else {
+            setPlayerError(friendlyPlayerError(data.details))
+          }
         })
         // Pistes audio multiples (VF/VO...) si le flux HLS les déclare
         hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, () => {
@@ -125,6 +153,7 @@ export default function LiveTV({ creds, onPlay, jump }: Props) {
       cancelled = true
       video.removeEventListener('playing', onPlaying)
       hlsRef.current?.destroy(); hlsRef.current = null
+      mpegtsRef.current?.destroy(); mpegtsRef.current = null
       stopVideo(video)
     }
   }, [activeChannel, api, retryTick])
@@ -566,6 +595,21 @@ export default function LiveTV({ creds, onPlay, jump }: Props) {
                     >
                       {audioTracks.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                     </select>
+                  )}
+                  {document.pictureInPictureEnabled && (
+                    <button
+                      onClick={() => {
+                        const v = videoRef.current
+                        if (!v) return
+                        if (document.pictureInPictureElement) document.exitPictureInPicture()
+                        else v.requestPictureInPicture().catch(() => {})
+                      }}
+                      className="bg-black/60 hover:bg-black/80 text-white rounded-lg p-2 transition"
+                      style={{ touchAction: 'manipulation' }}
+                      title="Fenêtre flottante (PiP)"
+                    >
+                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="4" width="20" height="16" rx="2"/><rect x="12" y="12" width="7" height="5" rx="1" fill="currentColor"/></svg>
+                    </button>
                   )}
                   <button onClick={handleFullscreen} className="bg-black/60 hover:bg-black/80 text-white rounded-lg p-2 transition" style={{ touchAction: 'manipulation' }}>
                     <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
