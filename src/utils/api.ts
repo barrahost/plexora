@@ -89,7 +89,10 @@ export class XtreamAPI {
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
         return fixMojibakeDeep(await res.json())
       } catch (e) {
-        lastErr = e
+        // Message clair : timeout distingué d'une erreur réseau générique
+        lastErr = (e instanceof DOMException && e.name === 'AbortError')
+          ? new Error('Délai dépassé (15s) — serveur trop lent ou injoignable')
+          : e
       }
     }
     throw lastErr

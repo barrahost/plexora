@@ -27,8 +27,9 @@ export default function Login({ onLogin }: Props) {
       }
       saveCredentials(creds)
       onLogin(creds)
-    } catch {
-      setError('Impossible de joindre le serveur. Vérifie l\'URL.')
+    } catch (e) {
+      const detail = e instanceof Error ? e.message : String(e)
+      setError(`Impossible de joindre le serveur. Vérifie l'URL.\n(${detail})`)
     } finally {
       setLoading(false)
     }
@@ -86,7 +87,7 @@ export default function Login({ onLogin }: Props) {
           </div>
 
           {error && (
-            <div className="bg-red-900/40 border border-red-700/50 text-red-300 text-sm rounded-xl px-4 py-3">
+            <div className="bg-red-900/40 border border-red-700/50 text-red-300 text-sm rounded-xl px-4 py-3 whitespace-pre-line">
               {error}
             </div>
           )}
