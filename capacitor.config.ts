@@ -13,6 +13,14 @@ const config: CapacitorConfig = {
   android: {
     allowMixedContent: true,
   },
+  plugins: {
+    // Route fetch()/XHR vers le reseau natif Android (OkHttp) au lieu du
+    // moteur JS du WebView. Contourne le CORS (regle propre aux navigateurs,
+    // absente des apps natives comme TiviMate) sur les appels API JSON.
+    CapacitorHttp: {
+      enabled: true,
+    },
+  },
 }
 
 export default config
