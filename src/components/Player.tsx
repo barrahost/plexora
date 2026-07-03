@@ -4,6 +4,7 @@ import mpegts from 'mpegts.js'
 import type { XtreamChannel, XtreamMovie, EPGItem } from '../types/xtream'
 import { XtreamAPI, needsProxy, stopVideo } from '../utils/api'
 import { attachResume } from '../utils/resume'
+import { getHlsBufferConfig } from '../utils/buffer'
 import type { XtreamCredentials } from '../types/xtream'
 
 interface Props {
@@ -40,7 +41,7 @@ export default function Player({ streamUrl, title, cover, channel, creds, onClos
       : streamUrl
 
     if (isHlsStream && Hls.isSupported()) {
-      const hls = new Hls({ enableWorker: true, lowLatencyMode: true })
+      const hls = new Hls({ enableWorker: true, ...getHlsBufferConfig() })
       hlsRef.current = hls
       hls.loadSource(url)
       hls.attachMedia(video)

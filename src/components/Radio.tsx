@@ -3,6 +3,7 @@ import type { XtreamCredentials, XtreamCategory, XtreamChannel } from '../types/
 import { XtreamAPI, needsProxy, stopVideo } from '../utils/api'
 import { ChannelLogo, LoadMore, PAGE_SIZE, tvProps } from './ui'
 import { loadCached, saveCached, cacheKey } from '../utils/cache'
+import { getHlsBufferConfig } from '../utils/buffer'
 import Hls from 'hls.js'
 
 interface Props {
@@ -69,7 +70,7 @@ export default function Radio({ creds }: Props) {
     const url = needsProxy() ? `/hls?url=${encodeURIComponent(m3u8)}` : m3u8
     hlsRef.current?.destroy()
     if (Hls.isSupported()) {
-      const hls = new Hls({ enableWorker: true })
+      const hls = new Hls({ enableWorker: true, ...getHlsBufferConfig() })
       hlsRef.current = hls
       hls.loadSource(url)
       hls.attachMedia(audio)

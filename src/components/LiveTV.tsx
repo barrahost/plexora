@@ -4,6 +4,7 @@ import { XtreamAPI, getFavorites, toggleFavorite, needsProxy, stopVideo, fixMoji
 import { ChannelLogo, LiveTVSkeleton, LoadMore, PAGE_SIZE, tvProps } from './ui'
 import { getXmltvEpg } from '../utils/epg'
 import { loadCached, saveCached, cacheKey } from '../utils/cache'
+import { getHlsBufferConfig } from '../utils/buffer'
 import Hls from 'hls.js'
 import mpegts from 'mpegts.js'
 
@@ -134,7 +135,7 @@ export default function LiveTV({ creds, onPlay, jump }: Props) {
       const url = needsProxy() ? `/hls?url=${encodeURIComponent(m3u8)}` : m3u8
       hlsRef.current?.destroy()
       if (Hls.isSupported()) {
-        const hls = new Hls({ enableWorker: true })
+        const hls = new Hls({ enableWorker: true, ...getHlsBufferConfig() })
         hlsRef.current = hls
         hls.loadSource(url)
         hls.attachMedia(video)
