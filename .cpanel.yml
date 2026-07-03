@@ -3,3 +3,5 @@ deployment:
   tasks:
     - export DEPLOYPATH=/home/dinfras/public_html/plexora/
     - /bin/cp -R dist/* $DEPLOYPATH
+    - /bin/mkdir -p $DEPLOYPATH/plexora-apk
+    - /bin/cp releases/plexora.apk $DEPLOYPATH/plexora-apk/app-debug.apk
