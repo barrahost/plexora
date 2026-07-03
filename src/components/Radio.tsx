@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { XtreamCredentials, XtreamCategory, XtreamChannel } from '../types/xtream'
 import { XtreamAPI, needsProxy, stopVideo } from '../utils/api'
 import { ChannelLogo, LoadMore, PAGE_SIZE, tvProps } from './ui'
+import { loadCached, saveCached, cacheKey } from '../utils/cache'
 import Hls from 'hls.js'
 
 interface Props {
@@ -22,20 +23,32 @@ export default function Radio({ creds }: Props) {
   const hlsRef = useRef<Hls | null>(null)
 
   useEffect(() => {
+    // Même source que Live TV (get_live_streams) : on partage son cache pour
+    // éviter de retélécharger 4000+ chaînes une seconde fois.
+    const key = cacheKey('live', creds)
+    function applyRadio(cats: XtreamCategory[], chans: XtreamChannel[]) {
+      const radioCats = cats.filter(c => /radio/i.test(c.category_name))
+      const radioCatIds = new Set(radioCats.map(c => c.category_id))
+      setCategories(radioCats)
+      setStations(chans.filter(c => radioCatIds.has(c.category_id)))
+    }
     async function load() {
-      setLoading(true)
+      const cached = loadCached<{ categories: XtreamCategory[]; channels: XtreamChannel[] }>(key)
+      if (cached) {
+        applyRadio(cached.categories, cached.channels)
+        setLoading(false)
+      } else {
+        setLoading(true)
+      }
       try {
         const [cats, chans] = await Promise.all([api.getLiveCategories(), api.getLiveStreams()])
-        // Les stations radio sont dans des catégories dont le nom contient RADIO
-        const radioCats = cats.filter(c => /radio/i.test(c.category_name))
-        const radioCatIds = new Set(radioCats.map(c => c.category_id))
-        setCategories(radioCats)
-        setStations(chans.filter(c => radioCatIds.has(c.category_id)))
+        applyRadio(cats, chans)
+        saveCached(key, { categories: cats, channels: chans })
       } catch (e) { console.error(e) }
       finally { setLoading(false) }
     }
     load()
-  }, [api])
+  }, [api, creds])
 
   const filtered = useMemo(() => {
     let list = stations

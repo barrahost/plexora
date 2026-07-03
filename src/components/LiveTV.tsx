@@ -3,6 +3,7 @@ import type { XtreamCredentials, XtreamCategory, XtreamChannel, EPGItem } from '
 import { XtreamAPI, getFavorites, toggleFavorite, needsProxy, stopVideo, fixMojibake } from '../utils/api'
 import { ChannelLogo, LiveTVSkeleton, LoadMore, PAGE_SIZE, tvProps } from './ui'
 import { getXmltvEpg } from '../utils/epg'
+import { loadCached, saveCached, cacheKey } from '../utils/cache'
 import Hls from 'hls.js'
 import mpegts from 'mpegts.js'
 
@@ -51,17 +52,28 @@ export default function LiveTV({ creds, onPlay, jump }: Props) {
   }, [jump])
 
   useEffect(() => {
+    const key = cacheKey('live', creds)
     async function load() {
-      setLoading(true)
+      // Affiche immédiatement la dernière copie connue (comme un lecteur natif),
+      // rafraîchit en arrière-plan sans bloquer l'affichage
+      const cached = loadCached<{ categories: XtreamCategory[]; channels: XtreamChannel[] }>(key)
+      if (cached) {
+        setCategories(cached.categories)
+        setChannels(cached.channels)
+        setLoading(false)
+      } else {
+        setLoading(true)
+      }
       try {
         const [cats, chans] = await Promise.all([api.getLiveCategories(), api.getLiveStreams()])
         setCategories(cats)
         setChannels(chans)
+        saveCached(key, { categories: cats, channels: chans })
       } catch (e) { console.error(e) }
       finally { setLoading(false) }
     }
     load()
-  }, [api])
+  }, [api, creds])
 
   useEffect(() => {
     if (!activeChannel || !videoRef.current) return

@@ -3,6 +3,7 @@ import type { XtreamCredentials, XtreamCategory, XtreamSeries } from '../types/x
 import { XtreamAPI, needsProxy, stopVideo } from '../utils/api'
 import { GridSkeleton, CodecBadge, TechChips, openInVlc, LoadMore, PAGE_SIZE, tvProps } from './ui'
 import { attachResume } from '../utils/resume'
+import { loadCached, saveCached, cacheKey } from '../utils/cache'
 
 import Hls from 'hls.js'
 
@@ -65,17 +66,28 @@ export default function SeriesView({ creds, onPlay, jump }: Props) {
   const hlsRef = useRef<Hls | null>(null)
 
   useEffect(() => {
+    const key = cacheKey('series', creds)
     async function load() {
-      setLoading(true)
+      const cached = loadCached<{ categories: XtreamCategory[]; series: XtreamSeries[] }>(key)
+      if (cached) {
+        setCategories(cached.categories)
+        setSeries(cached.series)
+        setLoading(false)
+      } else {
+        setLoading(true)
+      }
       try {
         const [cats, srs] = await Promise.all([api.getSeriesCategories(), api.getSeries()])
-        setCategories(Array.isArray(cats) ? cats : [])
-        setSeries(Array.isArray(srs) ? srs : [])
+        const catsArr = Array.isArray(cats) ? cats : []
+        const srsArr = Array.isArray(srs) ? srs : []
+        setCategories(catsArr)
+        setSeries(srsArr)
+        saveCached(key, { categories: catsArr, series: srsArr })
       } catch (e) { console.error(e) }
       finally { setLoading(false) }
     }
     load()
-  }, [api])
+  }, [api, creds])
 
   const loadInfo = useMemo(() => (s: XtreamSeries) => {
     setSeriesInfo(null)

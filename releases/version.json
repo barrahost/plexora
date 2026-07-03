@@ -1,5 +1,5 @@
 {
-  "versionCode": 2,
-  "versionName": "1.1",
-  "notes": "Navigation telecommande, CapacitorHttp, corrections logo/menu, double-back pour quitter"
+  "versionCode": 3,
+  "versionName": "1.2",
+  "notes": "Chargement instantane des listes (cache local, comme TiviMate)"
 }

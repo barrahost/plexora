@@ -3,6 +3,7 @@ import type { XtreamCredentials, XtreamCategory, XtreamMovie } from '../types/xt
 import { XtreamAPI, getFavorites, toggleFavorite, needsProxy, stopVideo } from '../utils/api'
 import { GridSkeleton, CodecBadge, TechChips, openInVlc, LoadMore, PAGE_SIZE, tvProps } from './ui'
 import { attachResume } from '../utils/resume'
+import { loadCached, saveCached, cacheKey } from '../utils/cache'
 import type { TechInfoData } from './ui'
 import Hls from 'hls.js'
 
@@ -53,12 +54,21 @@ export default function Movies({ creds, onPlay, jump }: Props) {
   }, [jump])
 
   useEffect(() => {
+    const key = cacheKey('movies', creds)
     async function load() {
-      setLoading(true)
+      const cached = loadCached<{ categories: XtreamCategory[]; movies: XtreamMovie[] }>(key)
+      if (cached) {
+        setCategories(cached.categories)
+        setMovies(cached.movies)
+        setLoading(false)
+      } else {
+        setLoading(true)
+      }
       try {
         const [cats, vods] = await Promise.all([api.getVodCategories(), api.getVodStreams()])
         setCategories(cats)
         setMovies(vods)
+        saveCached(key, { categories: cats, movies: vods })
       } catch (e) {
         console.error(e)
       } finally {
@@ -66,7 +76,7 @@ export default function Movies({ creds, onPlay, jump }: Props) {
       }
     }
     load()
-  }, [api])
+  }, [api, creds])
 
   // Charge les métadonnées détaillées quand on sélectionne un film
   useEffect(() => {
