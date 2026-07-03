@@ -1,5 +1,5 @@
 {
-  "versionCode": 6,
-  "versionName": "1.5",
-  "notes": "Bouton Retour : defocus, puis navigation en profondeur, puis double-clic pour quitter"
+  "versionCode": 7,
+  "versionName": "1.6",
+  "notes": "Correctif urgent : le reglage de tampon empechait le direct/radio de demarrer"
 }

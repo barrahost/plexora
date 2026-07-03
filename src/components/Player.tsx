@@ -41,7 +41,7 @@ export default function Player({ streamUrl, title, cover, channel, creds, onClos
       : streamUrl
 
     if (isHlsStream && Hls.isSupported()) {
-      const hls = new Hls({ enableWorker: true, ...getHlsBufferConfig() })
+      const hls = new Hls({ enableWorker: true, lowLatencyMode: true, ...getHlsBufferConfig() })
       hlsRef.current = hls
       hls.loadSource(url)
       hls.attachMedia(video)

@@ -8,14 +8,17 @@ export type BufferMode = 'small' | 'medium' | 'high'
 interface Preset {
   maxBufferLength: number
   maxMaxBufferLength: number
-  liveSyncDurationCount: number
-  lowLatencyMode: boolean
 }
 
+// Uniquement des réglages "sûrs" : combien tamponner UNE FOIS la lecture
+// démarrée. On ne touche pas à liveSyncDurationCount/lowLatencyMode — ces
+// options gouvernent le nombre de segments à charger AVANT de démarrer la
+// lecture, et une valeur trop haute peut empêcher le direct de démarrer du
+// tout sur un serveur IPTV aussi instable que celui-ci (régression constatée).
 const PRESETS: Record<BufferMode, Preset> = {
-  small:  { maxBufferLength: 10, maxMaxBufferLength: 30,  liveSyncDurationCount: 3, lowLatencyMode: true },
-  medium: { maxBufferLength: 30, maxMaxBufferLength: 90,  liveSyncDurationCount: 5, lowLatencyMode: false },
-  high:   { maxBufferLength: 60, maxMaxBufferLength: 180, liveSyncDurationCount: 8, lowLatencyMode: false },
+  small:  { maxBufferLength: 15, maxMaxBufferLength: 30 },
+  medium: { maxBufferLength: 30, maxMaxBufferLength: 60 },
+  high:   { maxBufferLength: 60, maxMaxBufferLength: 120 },
 }
 
 const KEY = 'iptv_buffer_mode'
