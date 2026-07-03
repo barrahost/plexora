@@ -66,7 +66,30 @@ function onKeyDown(e: KeyboardEvent): void {
   if (next) {
     e.preventDefault()
     next.focus()
-    next.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' })
+    ensureVisible(next)
+  }
+}
+
+// Remonte manuellement chaque conteneur défilant ancêtre pour révéler
+// l'élément. scrollIntoView() seul est peu fiable dans les WebView Android
+// quand plusieurs conteneurs overflow sont imbriqués (colonnes de menus) :
+// le focus se déplaçait "en silence" hors champ visible, donnant
+// l'impression que la navigation était bloquée.
+function ensureVisible(el: HTMLElement): void {
+  let node = el.parentElement
+  while (node) {
+    const style = getComputedStyle(node)
+    const canScrollY = /(auto|scroll)/.test(style.overflowY) && node.scrollHeight > node.clientHeight
+    if (canScrollY) {
+      const elRect = el.getBoundingClientRect()
+      const containerRect = node.getBoundingClientRect()
+      if (elRect.top < containerRect.top) {
+        node.scrollTop -= (containerRect.top - elRect.top) + 12
+      } else if (elRect.bottom > containerRect.bottom) {
+        node.scrollTop += (elRect.bottom - containerRect.bottom) + 12
+      }
+    }
+    node = node.parentElement
   }
 }
 

@@ -12,6 +12,7 @@ import PlaylistManager from './components/PlaylistManager'
 import GlobalSearch from './components/GlobalSearch'
 import { prefetchXmltv } from './utils/epg'
 import { isTV, enableTVNavigation } from './utils/tvNav'
+import { App as CapacitorApp } from '@capacitor/app'
 
 interface PlayInfo {
   url: string
@@ -65,6 +66,7 @@ export default function App() {
   const [accountInfo, setAccountInfo] = useState<XtreamAccountInfo | null>(null)
   const [searchOpen, setSearchOpen] = useState(false)
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false)
+  const [exitHint, setExitHint] = useState(false)
   // "Sauts" déclenchés par la recherche globale (ts force le re-déclenchement)
   const [jumpChannel, setJumpChannel] = useState<{ item: XtreamChannel; ts: number } | null>(null)
   const [jumpMovie, setJumpMovie] = useState<{ item: XtreamMovie; ts: number } | null>(null)
@@ -93,6 +95,31 @@ export default function App() {
   useEffect(() => {
     if (isTV()) enableTVNavigation()
   }, [])
+
+  // Bouton Retour (télécommande/Android) : ferme d'abord ce qui est ouvert
+  // (recherche, menu, lecteur), puis quitte l'app sur un double appui rapide
+  useEffect(() => {
+    let lastBack = 0
+    let hintTimer: ReturnType<typeof setTimeout> | null = null
+    const listener = CapacitorApp.addListener('backButton', () => {
+      if (searchOpen) { setSearchOpen(false); return }
+      if (mobileMoreOpen) { setMobileMoreOpen(false); return }
+      if (playing) { setPlaying(null); return }
+      const now = Date.now()
+      if (now - lastBack < 2000) {
+        CapacitorApp.exitApp()
+      } else {
+        lastBack = now
+        setExitHint(true)
+        if (hintTimer) clearTimeout(hintTimer)
+        hintTimer = setTimeout(() => setExitHint(false), 2000)
+      }
+    })
+    return () => {
+      listener.then(h => h.remove())
+      if (hintTimer) clearTimeout(hintTimer)
+    }
+  }, [searchOpen, mobileMoreOpen, playing])
 
   // Fermeture d'onglet / navigation : couper tous les flux pour libérer
   // la connexion IPTV (max_connections=1) immédiatement côté serveur
@@ -137,43 +164,43 @@ export default function App() {
     <div className="h-screen bg-gray-950 text-white flex flex-col overflow-hidden">
 
       {/* ── Top navbar (desktop) ── */}
-      <header className="flex-shrink-0 h-24 bg-gray-900 border-b border-gray-800 flex items-center px-4 gap-4">
-        <div className="flex items-center">
-          <img src="/logo-plexora-nav.png" alt="Plexora" className="h-20 w-auto" />
+      <header className="flex-shrink-0 h-24 bg-gray-900 border-b border-gray-800 flex items-center px-4 gap-3">
+        <div className="flex items-center flex-shrink-0">
+          <img src="/logo-plexora-nav.png" alt="Plexora" className="h-16 w-auto flex-shrink-0" />
         </div>
 
         {/* Desktop nav */}
-        <nav className="hidden sm:flex items-center gap-1 ml-2">
+        <nav className="hidden sm:flex items-center gap-1 ml-2 overflow-x-auto">
           {[...NAV_ITEMS, ...MORE_ITEMS].map(item => (
             <button
               key={item.id}
               onClick={() => setView(item.id)}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex-shrink-0 whitespace-nowrap ${
                 view === item.id ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white hover:bg-gray-800'
               }`}
               style={{ touchAction: 'manipulation' }}
             >
-              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d={item.icon}/></svg>
-              <span className="hidden md:block">{item.label}</span>
+              <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d={item.icon}/></svg>
+              <span className="hidden lg:block">{item.label}</span>
             </button>
           ))}
         </nav>
 
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex items-center gap-2 flex-shrink-0">
           {/* Recherche globale */}
           <button
             onClick={() => setSearchOpen(true)}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm text-gray-400 hover:text-white hover:bg-gray-800 transition-colors border border-gray-800"
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm text-gray-400 hover:text-white hover:bg-gray-800 transition-colors border border-gray-800 flex-shrink-0"
             style={{ touchAction: 'manipulation' }}
             title="Recherche globale (Ctrl+K)"
           >
-            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-            <span className="hidden md:block text-xs text-gray-500">Rechercher</span>
-            <kbd className="hidden md:block text-[10px] text-gray-500 bg-gray-800 border border-gray-700 rounded px-1.5 py-0.5">Ctrl K</kbd>
+            <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+            <span className="hidden xl:block text-xs text-gray-500 whitespace-nowrap">Rechercher</span>
+            <kbd className="hidden xl:block text-[10px] text-gray-500 bg-gray-800 border border-gray-700 rounded px-1.5 py-0.5">Ctrl K</kbd>
           </button>
           {accountInfo && (
-            <div className="hidden lg:flex items-center gap-2 text-xs text-gray-500 px-2">
-              <div className={`w-1.5 h-1.5 rounded-full ${accountInfo.user_info.status === 'Active' ? 'bg-green-500' : 'bg-red-500'}`} />
+            <div className="hidden xl:flex items-center gap-2 text-xs text-gray-500 px-2 flex-shrink-0 whitespace-nowrap">
+              <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${accountInfo.user_info.status === 'Active' ? 'bg-green-500' : 'bg-red-500'}`} />
               <span>{accountInfo.user_info.username}</span>
               {expDate && <span>· {expDate}</span>}
             </div>
@@ -181,7 +208,7 @@ export default function App() {
 
           <button
             onClick={handleLogout}
-            className="flex items-center justify-center min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 sm:gap-1.5 sm:px-3 sm:py-1.5 rounded-lg text-sm text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
+            className="flex items-center justify-center min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 sm:gap-1.5 sm:px-3 sm:py-1.5 rounded-lg text-sm text-gray-400 hover:text-white hover:bg-gray-800 transition-colors flex-shrink-0"
             title="Déconnexion"
             style={{ touchAction: 'manipulation' }}
           >
@@ -281,6 +308,13 @@ export default function App() {
           )
         })()}
       </nav>
+
+      {/* ── Toast quitter (double appui Retour) ── */}
+      {exitHint && (
+        <div className="fixed bottom-24 sm:bottom-6 left-1/2 -translate-x-1/2 z-50 bg-gray-900 border border-gray-700 text-white text-sm px-4 py-2.5 rounded-xl shadow-2xl">
+          Appuie de nouveau sur Retour pour quitter
+        </div>
+      )}
 
       {/* ── Player overlay ── */}
       {playing && (

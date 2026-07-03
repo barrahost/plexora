@@ -33,7 +33,7 @@ html, body, #root {
    taille de police racine agrandit proportionnellement toute l'UI, sans
    toucher au code des composants. */
 html.tv-mode {
-  font-size: 19px;
+  font-size: 18px;
 }
 
 /* Anneau de focus large et lumineux, visible a distance, uniquement pour

@@ -1,0 +1,14 @@
+Corrections navigation TV : D-pad bloque, logo/menu header, double-back pour quitter
+
+- tvNav.ts : remplace scrollIntoView (peu fiable dans le WebView Android avec
+  plusieurs conteneurs overflow imbriques) par un scroll manuel des ancetres
+  defilants. Le focus se deplacait bien vers les listes de bouquets/paquets
+  mais restait hors champ visible, donnant l'impression que ca bloquait.
+- App.tsx : logo reduit (h-16), flex-shrink-0 sur le logo et les boutons de
+  menu, labels visibles a partir de breakpoints plus larges (lg/xl) pour
+  eviter le tassement du header sur les resolutions TV.
+- index.css : echelle tv-mode ajustee (18px) pour degager un peu de marge.
+- @capacitor/app : bouton Retour ferme d'abord recherche/menu/lecteur ouverts,
+  puis quitte l'app sur un double appui sous 2s (toast de confirmation).
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
