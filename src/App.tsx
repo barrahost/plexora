@@ -13,6 +13,8 @@ import GlobalSearch from './components/GlobalSearch'
 import { prefetchXmltv } from './utils/epg'
 import { isTV, enableTVNavigation } from './utils/tvNav'
 import { App as CapacitorApp } from '@capacitor/app'
+import { checkForUpdate, openApkUrl } from './utils/updateCheck'
+import type { UpdateInfo } from './utils/updateCheck'
 
 interface PlayInfo {
   url: string
@@ -67,6 +69,7 @@ export default function App() {
   const [searchOpen, setSearchOpen] = useState(false)
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false)
   const [exitHint, setExitHint] = useState(false)
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null)
   // "Sauts" déclenchés par la recherche globale (ts force le re-déclenchement)
   const [jumpChannel, setJumpChannel] = useState<{ item: XtreamChannel; ts: number } | null>(null)
   const [jumpMovie, setJumpMovie] = useState<{ item: XtreamMovie; ts: number } | null>(null)
@@ -94,6 +97,11 @@ export default function App() {
   // Android TV / Fire TV / téléviseurs connectés : navigation D-pad + échelle 10 pieds
   useEffect(() => {
     if (isTV()) enableTVNavigation()
+  }, [])
+
+  // Vérifie une nouvelle version au démarrage (app native uniquement, silencieux si échec)
+  useEffect(() => {
+    checkForUpdate().then(setUpdateInfo)
   }, [])
 
   // Bouton Retour (télécommande/Android) : ferme d'abord ce qui est ouvert
@@ -308,6 +316,28 @@ export default function App() {
           )
         })()}
       </nav>
+
+      {/* ── Bannière mise à jour disponible ── */}
+      {updateInfo && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-violet-600 text-white text-sm px-4 py-2.5 rounded-xl shadow-2xl flex items-center gap-3 max-w-[90vw]">
+          <span>Nouvelle version {updateInfo.versionName} disponible{updateInfo.notes ? ` — ${updateInfo.notes}` : ''}</span>
+          <button
+            onClick={() => openApkUrl(updateInfo.apkUrl)}
+            className="flex-shrink-0 bg-white/20 hover:bg-white/30 px-3 py-1 rounded-lg text-xs font-semibold transition"
+            style={{ touchAction: 'manipulation' }}
+          >
+            Télécharger
+          </button>
+          <button
+            onClick={() => setUpdateInfo(null)}
+            className="flex-shrink-0 text-white/70 hover:text-white"
+            style={{ touchAction: 'manipulation' }}
+            aria-label="Fermer"
+          >
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+      )}
 
       {/* ── Toast quitter (double appui Retour) ── */}
       {exitHint && (

@@ -5,3 +5,4 @@ deployment:
     - /bin/cp -R dist/* $DEPLOYPATH
     - /bin/mkdir -p $DEPLOYPATH/plexora-apk
     - /bin/cp releases/plexora.apk $DEPLOYPATH/plexora-apk/app-debug.apk
+    - /bin/cp releases/version.json $DEPLOYPATH/plexora-apk/version.json
