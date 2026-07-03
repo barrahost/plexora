@@ -13,6 +13,7 @@ import GlobalSearch from './components/GlobalSearch'
 import { prefetchXmltv } from './utils/epg'
 import { isTV, enableTVNavigation } from './utils/tvNav'
 import { App as CapacitorApp } from '@capacitor/app'
+import { Capacitor } from '@capacitor/core'
 import { checkForUpdate, openApkUrl } from './utils/updateCheck'
 import type { UpdateInfo } from './utils/updateCheck'
 
@@ -96,7 +97,14 @@ export default function App() {
 
   // Android TV / Fire TV / téléviseurs connectés : navigation D-pad + échelle 10 pieds
   useEffect(() => {
-    if (isTV()) enableTVNavigation()
+    // isTV() se base sur des indices fragiles (user-agent, tactile) qui peuvent
+    // se tromper sur certaines box Android TV. Sur l'app native, on active donc
+    // systematiquement le moteur de navigation D-pad (sans risque : le
+    // focus-visible n'apparait qu'au clavier/D-pad, jamais au clic/tactile).
+    // L'echelle "10 pieds" (police agrandie), elle, ne s'applique que si la
+    // detection TV est positive — inutile sur mobile natif.
+    const tv = isTV()
+    if (tv || Capacitor.isNativePlatform()) enableTVNavigation(tv)
   }, [])
 
   // Vérifie une nouvelle version au démarrage (app native uniquement, silencieux si échec)

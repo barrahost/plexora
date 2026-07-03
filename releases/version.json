@@ -1,5 +1,5 @@
 {
-  "versionCode": 4,
-  "versionName": "1.3",
-  "notes": "Ecran Parametres (comptes + reglage du tampon video)"
+  "versionCode": 5,
+  "versionName": "1.4",
+  "notes": "Correction : navigation D-pad activee de facon fiable sur toute app native"
 }

@@ -16,12 +16,16 @@ export function isTV(): boolean {
 
 let enabled = false
 
-export function enableTVNavigation(): void {
-  if (enabled) return
-  enabled = true
-  document.documentElement.classList.add('tv-mode')
-  window.addEventListener('keydown', onKeyDown, true)
-  requestAnimationFrame(focusFirst)
+// scaleUi : applique l'échelle "10 pieds" (police racine agrandie). À laisser
+// false sur mobile natif (nav D-pad utile en bonus clavier/BT, mais l'UI
+// tactile est déjà bien dimensionnée) — true sur TV.
+export function enableTVNavigation(scaleUi = true): void {
+  if (!enabled) {
+    enabled = true
+    window.addEventListener('keydown', onKeyDown, true)
+    requestAnimationFrame(focusFirst)
+  }
+  if (scaleUi) document.documentElement.classList.add('tv-mode')
 }
 
 function isVisible(el: HTMLElement): boolean {
